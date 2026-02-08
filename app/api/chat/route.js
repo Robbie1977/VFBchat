@@ -326,19 +326,13 @@ Response strategy:
               
               // Switch back to thinking for next LLM call
               sendEvent('status', { message: 'Thinking', phase: 'llm' })
-            }
-          }
-
-          // Check if we have tool calls after processing (or if they were cleared)
-          if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
-            // Final response
+          } else {
+            // No tool calls - this is the final response
             finalResponse = assistantMessage.content || ''
             log('Final response generated', { length: finalResponse.length })
             break
           }
         }
-
-        // If no final response after max iterations, get one without tools
         if (!finalResponse) {
           log('No final response after max iterations, making fallback call')
           const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
