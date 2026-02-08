@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { randomUUID } from 'node:crypto'
 
 function log(message, data = {}) {
   const timestamp = new Date().toISOString()
@@ -203,99 +204,75 @@ Response strategy:
                 try {
                   let toolResult = null
 
-                  // Call appropriate MCP endpoint using JSON-RPC
+                  // Call MCP tool using proper session-based protocol
                   const mcpServerUrl = 'https://vfb3-mcp.virtualflybrain.org/'
 
-                  if (toolCall.function.name === 'get_term_info') {
-                    const response = await fetch(mcpServerUrl, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        jsonrpc: '2.0',
-                        method: 'get_term_info',
-                        params: { id: toolCall.function.arguments.id },
-                        id: Date.now()
-                      })
-                    })
-                    if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
-                      const rpcResponse = await response.json()
-                      if (rpcResponse.result) {
-                        toolResult = rpcResponse.result
-                      } else if (rpcResponse.error) {
-                        throw new Error(`MCP server error: ${rpcResponse.error.message}`)
+                  // Initialize MCP session
+                  const sessionId = randomUUID()
+                  const initResponse = await fetch(mcpServerUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'mcp-session-id': sessionId },
+                    body: JSON.stringify({
+                      jsonrpc: '2.0',
+                      id: Date.now(),
+                      method: 'initialize',
+                      params: {
+                        protocolVersion: '2024-11-05',
+                        capabilities: {},
+                        clientInfo: {
+                          name: 'vfb-chat-client',
+                          version: '1.0.0'
+                        }
                       }
-                    } else {
-                      const errorText = await response.text()
-                      log('MCP server error response', { 
-                        tool: 'get_term_info', 
-                        status: response.status, 
-                        contentType: response.headers.get('content-type'),
-                        errorPreview: errorText.substring(0, 500)
-                      })
-                      throw new Error(`MCP server error (${response.status}): ${errorText.substring(0, 200)}`)
-                    }
-                  } else if (toolCall.function.name === 'search_terms') {
-                    const response = await fetch(mcpServerUrl, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        jsonrpc: '2.0',
-                        method: 'search_terms',
-                        params: {
-                          query: toolCall.function.arguments.query,
-                          filter_types: toolCall.function.arguments.filter_types
-                        },
-                        id: Date.now()
-                      })
                     })
-                    if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
-                      const rpcResponse = await response.json()
-                      if (rpcResponse.result) {
-                        toolResult = rpcResponse.result
-                      } else if (rpcResponse.error) {
-                        throw new Error(`MCP server error: ${rpcResponse.error.message}`)
+                  })
+
+                  if (!initResponse.ok) {
+                    const errorText = await initResponse.text()
+                    log('MCP initialize failed', { status: initResponse.status, error: errorText })
+                    throw new Error(`MCP initialize failed (${initResponse.status}): ${errorText}`)
+                  }
+
+                  const initData = await initResponse.json()
+                  if (initData.error) {
+                    log('MCP initialize error', { error: initData.error })
+                    throw new Error(`MCP initialize error: ${initData.error.message}`)
+                  }
+
+                  // Get actual session ID from response headers if set
+                  const actualSessionId = initResponse.headers.get('mcp-session-id') || sessionId
+
+                  // Now call the tool
+                  const toolResponse = await fetch(mcpServerUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'mcp-session-id': actualSessionId },
+                    body: JSON.stringify({
+                      jsonrpc: '2.0',
+                      id: Date.now(),
+                      method: 'tools/call',
+                      params: {
+                        name: toolCall.function.name,
+                        arguments: toolCall.function.arguments
                       }
-                    } else {
-                      const errorText = await response.text()
-                      log('MCP server error response', { 
-                        tool: 'search_terms', 
-                        status: response.status, 
-                        contentType: response.headers.get('content-type'),
-                        errorPreview: errorText.substring(0, 500)
-                      })
-                      throw new Error(`MCP server error (${response.status}): ${errorText.substring(0, 200)}`)
-                    }
-                  } else if (toolCall.function.name === 'run_query') {
-                    const response = await fetch(mcpServerUrl, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        jsonrpc: '2.0',
-                        method: 'run_query',
-                        params: {
-                          id: toolCall.function.arguments.id,
-                          query_type: toolCall.function.arguments.query_type
-                        },
-                        id: Date.now()
-                      })
                     })
-                    if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
-                      const rpcResponse = await response.json()
-                      if (rpcResponse.result) {
-                        toolResult = rpcResponse.result
-                      } else if (rpcResponse.error) {
-                        throw new Error(`MCP server error: ${rpcResponse.error.message}`)
-                      }
-                    } else {
-                      const errorText = await response.text()
-                      log('MCP server error response', { 
-                        tool: 'run_query', 
-                        status: response.status, 
-                        contentType: response.headers.get('content-type'),
-                        errorPreview: errorText.substring(0, 500)
-                      })
-                      throw new Error(`MCP server error (${response.status}): ${errorText.substring(0, 200)}`)
+                  })
+
+                  if (toolResponse.ok && toolResponse.headers.get('content-type')?.includes('application/json')) {
+                    const rpcResponse = await toolResponse.json()
+                    if (rpcResponse.result) {
+                      toolResult = rpcResponse.result
+                    } else if (rpcResponse.error) {
+                      throw new Error(`MCP server error: ${rpcResponse.error.message}`)
                     }
+                  } else {
+                    const errorText = await toolResponse.text()
+                    log('MCP server error response', { 
+                      tool: toolCall.function.name, 
+                      status: toolResponse.status, 
+                      contentType: toolResponse.headers.get('content-type'),
+                      errorPreview: errorText.substring(0, 500)
+                    })
+                    throw new Error(`MCP server error (${toolResponse.status}): ${errorText.substring(0, 200)}`)
                   }
 
                   const toolDuration = Date.now() - toolStart
