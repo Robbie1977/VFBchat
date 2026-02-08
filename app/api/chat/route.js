@@ -266,6 +266,11 @@ Common query patterns:
 
           // Check for tool calls
           if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+            // Send intermediate reasoning to user in smaller font
+            if (assistantMessage.content) {
+              sendEvent('reasoning', { text: assistantMessage.content })
+            }
+            
             log('Processing tool calls', { count: assistantMessage.tool_calls.length })
             
             // Update status immediately when MCP calls are initiated

@@ -92,6 +92,10 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
               
               if (currentEvent === 'status') {
                 setThinkingMessage(data.message)
+              } else if (currentEvent === 'reasoning') {
+                // Add intermediate reasoning message in smaller font
+                const reasoningMessage = { role: 'reasoning', content: data.text }
+                setMessages(prev => [...prev, reasoningMessage])
               } else if (currentEvent === 'result') {
                 const botMessage = { role: 'assistant', content: data.response, images: data.images }
                 setMessages(prev => [...prev, botMessage])
@@ -147,6 +151,7 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
   const getDisplayName = (role) => {
     if (role === 'user') return 'Researcher'
     if (role === 'assistant') return 'VFB'
+    if (role === 'reasoning') return 'VFB'
     return role
   }
 
@@ -156,7 +161,11 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
       <div style={{ border: '1px solid #333', height: '400px', overflowY: 'scroll', padding: 10, backgroundColor: '#111', borderRadius: '4px' }}>
         {messages.map((msg, idx) => (
           <div key={idx} style={{ marginBottom: 10 }}>
-            <strong style={{ color: '#4a9eff' }}>{getDisplayName(msg.role)}:</strong> <span dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }} />
+            <strong style={{ color: '#4a9eff' }}>{getDisplayName(msg.role)}:</strong> 
+            <span 
+              dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }} 
+              style={msg.role === 'reasoning' ? { fontSize: '0.85em', fontStyle: 'italic', color: '#ccc' } : {}}
+            />
             {msg.images && msg.images.map((img, i) => (
               <div key={i} className="thumbnail-container" style={{ display: 'inline-block', margin: '5px', position: 'relative' }}>
                 <img 
