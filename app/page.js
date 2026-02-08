@@ -134,8 +134,8 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
       const isTransparent = match.includes('thumbnailT.png')
       const baseUrl = match.replace('/thumbnail.png', '').replace('/thumbnailT.png', '')
       return `<div class="inline-thumbnail-container" style="display: inline-block; margin: 2px; position: relative;">
-        <img src="${match}" alt="VFB Image" class="vfb-thumbnail" style="width: 60px; height: 60px; object-fit: cover; border: 1px solid #ddd; cursor: pointer; vertical-align: middle;" />
-        <div class="thumbnail-hover" style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ccc; border-radius: 4px; padding: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000; display: none; max-width: 300px;">
+        <img src="${match}" alt="VFB Image" class="vfb-thumbnail" style="width: 60px; height: 60px; object-fit: cover; border: 1px solid #555; cursor: pointer; vertical-align: middle;" />
+        <div class="thumbnail-hover" style="position: absolute; top: 100%; left: 0; background: #222; border: 1px solid #555; border-radius: 4px; padding: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); z-index: 1000; display: none; max-width: 300px;">
           <img src="${baseUrl}/volume.nrrd" alt="VFB Image" style="max-width: 100%; max-height: 200px;" />
         </div>
       </div>`
