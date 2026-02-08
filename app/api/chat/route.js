@@ -146,20 +146,19 @@ function summarizeTermInfo(termInfoText) {
   try {
     const data = JSON.parse(termInfoText)
     
-    // Extract key information
+    // Extract key information based on actual VFB response structure
     const summary = {
-      id: data.id,
-      name: data.Name?.label || data.label,
-      definition: data.Definition?.[0] || data.description,
-      type: data.Types?.[0]?.label || data.type,
-      superTypes: data.SuperTypes?.slice(0, 3).map(st => st.label) || [],
+      id: data.Id || data.id,
+      name: data.Name || data.name,
+      definition: data.Meta?.Description || data.description,
+      type: data.Types || data.type,
+      superTypes: data.SuperTypes?.slice(0, 3) || [],
       tags: data.Tags?.slice(0, 5) || []
     }
     
     // Format as concise text
     let result = `${summary.id}: ${summary.name || 'Unknown'}`
-    if (summary.definition) result += ` - ${summary.definition.substring(0, 100)}${summary.definition.length > 100 ? '...' : ''}`
-    if (summary.type) result += ` (Type: ${summary.type})`
+    if (summary.definition) result += ` - ${summary.definition.substring(0, 150)}${summary.definition.length > 150 ? '...' : ''}`
     if (summary.superTypes.length > 0) result += ` (SuperTypes: ${summary.superTypes.join(', ')})`
     if (summary.tags.length > 0) result += ` (Tags: ${summary.tags.join(', ')})`
     
