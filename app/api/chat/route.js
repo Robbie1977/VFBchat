@@ -141,6 +141,35 @@ function extractTermIds(text) {
   return Array.from(idSet)
 }
 
+// Summarize term info to reduce prompt length
+function summarizeTermInfo(termInfoText) {
+  try {
+    const data = JSON.parse(termInfoText)
+    
+    // Extract key information
+    const summary = {
+      id: data.id,
+      name: data.Name?.label || data.label,
+      definition: data.Definition?.[0] || data.description,
+      type: data.Types?.[0]?.label || data.type,
+      superTypes: data.SuperTypes?.slice(0, 3).map(st => st.label) || [],
+      tags: data.Tags?.slice(0, 5) || []
+    }
+    
+    // Format as concise text
+    let result = `${summary.id}: ${summary.name || 'Unknown'}`
+    if (summary.definition) result += ` - ${summary.definition.substring(0, 100)}${summary.definition.length > 100 ? '...' : ''}`
+    if (summary.type) result += ` (Type: ${summary.type})`
+    if (summary.superTypes.length > 0) result += ` (SuperTypes: ${summary.superTypes.join(', ')})`
+    if (summary.tags.length > 0) result += ` (Tags: ${summary.tags.join(', ')})`
+    
+    return result
+  } catch (error) {
+    // If parsing fails, return a truncated version of the original text
+    return termInfoText.substring(0, 300) + (termInfoText.length > 300 ? '...' : '')
+  }
+}
+
 // Initialize cache with common VFB terms
 function seedLookupCache() {
   const commonTerms = {
@@ -324,60 +353,20 @@ export async function POST(request) {
         ]
 
         // System prompt with comprehensive guardrailing based on VFB LLM guidance
-        const systemPrompt = `You are a knowledgeable assistant for Virtual Fly Brain (VFB), specializing in Drosophila neuroanatomy and neuroscience. You can answer questions about:
+        const systemPrompt = `You are a VFB assistant for Drosophila neuroanatomy. Use these tools:
 
-- Drosophila melanogaster (fruit fly) brain anatomy and neurobiology
-- Neural circuits and connectivity in flies
-- Gene expression patterns in the fly brain
-- Neuron morphology and classification
-- Brain region identification and relationships
-- Comparative neuroanatomy across species (fly-focused)
+TOOLS:
+- search_terms(query, filter_types, exclude_types, boost_types, start, rows): Search VFB terms with filters like ["neuron","adult","has_image"] for adult neurons, ["anatomy"] for brain regions, ["gene"] for genes. Always exclude ["deprecated"].
+- get_term_info(id): Get detailed info about a VFB entity by ID
+- run_query(id, query_type): Run analyses like PaintedDomains, NBLAST, Connectivity
 
-Use VFB MCP tools strategically following this approach:
+STRATEGY:
+1. For anatomy/neurons: search_terms with specific filters → get_term_info → run relevant queries
+2. Handle pagination if _truncation.canRequestMore=true
+3. Use pre-fetched term info when available (avoid redundant get_term_info calls)
+4. Construct VFB URLs: https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=<id>&i=<template_id>,<image_ids>
 
-1. START WITH SEARCH: When users ask about specific anatomy terms, neurons, or brain regions, use search_terms first to find relevant VFB entities. Use specific filter_types to narrow results significantly (e.g., ["neuron", "adult", "has_image"] for adult neurons with images, ["anatomy"] for brain regions, ["gene"] for genes). Always use exclude_types: ["deprecated"] to remove obsolete results. Use boost_types like ["has_image", "has_neuron_connectivity"] to prioritize useful entities.
-
-2. HANDLE TRUNCATED RESULTS: Search results are limited to 10 items by default for performance. If you need more results, check the response._truncation metadata:
-   - If _truncation.canRequestMore is true, call search_terms again with start=10, rows=10 to get the next batch
-   - Continue with start=20, start=30, etc. as needed
-   - Use smaller rows values (5-10) for focused searches to avoid overwhelming responses
-   - When _truncation.exactMatch is true, detailed term information is automatically pre-fetched and available in response._term_info
-
-3. GET DETAILED INFO: Use get_term_info on the most promising 1-3 IDs from search results to get comprehensive metadata including SuperTypes, Tags, Images, and available Queries. If an exact match was found, check response._term_info for pre-fetched details.
-
-4. EXPLORE RELATED DATA: Use run_query with different query_types based on Tags (PaintedDomains, SimilarMorphology, Connectivity) for entities that support these analyses.
-
-5. CONSTRUCT VISUALIZATIONS: When showing results, construct VFB browser URLs for 3D scenes using the format: https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=<focus_id>&i=<template_id>,<image_ids>
-
-Key guidelines:
-- Always put template ID first in i= parameter to ensure correct 3D coordinate space
-- Only combine images registered to the same template
-- Use specific filter_types like ["neuron", "adult", "has_image"] for adult neurons with images, ["anatomy"] for brain regions, ["gene"] for genes
-- Always exclude deprecated results with exclude_types: ["deprecated"]
-- Check Tags to see what analyses are available for each entity
-- If tool calls fail, provide answers based on your training knowledge and mention the technical issue
-
-VFB MCP server: https://vfb3-mcp.virtualflybrain.org/ (Streamable HTTP API)
-
-Available tools:
-- get_term_info(id): Get detailed metadata about VFB entities including images, relationships, and available analyses
-- search_terms(query, filter_types, exclude_types, boost_types, start, rows): Search for VFB terms with optional filtering, exclusion, boosting, and pagination. Results limited to 10 by default - use start/rows for pagination.
-- run_query(id, query_type): Execute pre-computed analyses like expression domains or connectivity maps
-
-Response strategy:
-1. Identify the scientific question and map to VFB capabilities
-2. Search for relevant terms using specific filtering to limit results
-3. If results are truncated (_truncation.canRequestMore=true), request additional batches with pagination
-4. Get detailed information for the most promising results
-5. Run relevant queries based on available Tags
-6. Explain findings with scientific interpretation
-7. Suggest 3D visualizations when relevant data is available
-
-Common query patterns:
-- Gene expression: Search with filter_types: ["gene"] → get_term_info → run PaintedDomains query
-- Neuron morphology: Search with filter_types: ["neuron", "adult", "has_image"] → get_term_info → check for SimilarMorphology
-- Brain regions: Search with filter_types: ["anatomy"] → explore relationships
-- Connectivity: Search with filter_types: ["has_neuron_connectivity"] → run Connectivity queries`
+Be concise, scientific, and suggest 3D visualizations when relevant.`
 
         // Initial messages
         const resolvedUserMessage = replaceTermsWithLinks(message)
@@ -408,12 +397,12 @@ Common query patterns:
             
             // Add pre-fetched term info as a system message
             const termInfoContext = termInfos.map(info => 
-              `Pre-fetched info for ${info.id}:\n${info.result}`
+              `Pre-fetched info for ${info.id}:\n${summarizeTermInfo(info.result)}`
             ).join('\n\n')
             
             messages.splice(1, 0, { 
               role: 'system', 
-              content: `The user query contains the following resolved VFB terms. Here is pre-fetched detailed information for each term to help you provide accurate responses:\n\n${termInfoContext}\n\nUse this information in your response and avoid making redundant get_term_info calls for these terms.` 
+              content: `Pre-fetched term info:\n${termInfoContext}\n\nUse this data - avoid redundant get_term_info calls.` 
             })
             
             log(`Added pre-fetched info for ${termIds.length} terms`)
