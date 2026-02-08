@@ -366,7 +366,7 @@ Common query patterns:
         // Initial messages
         const messages = [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: message }
+          { role: 'user', content: replaceTermsWithLinks(message) }
         ]
 
         let finalResponse = ''
