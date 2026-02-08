@@ -85,41 +85,47 @@ export async function POST(request) {
           }
         ]
 
-        // System prompt with comprehensive guardrailing
+        // System prompt with comprehensive guardrailing based on VFB LLM guidance
         const systemPrompt = `You are a knowledgeable assistant for Virtual Fly Brain (VFB), specializing in Drosophila neuroanatomy and neuroscience. You can answer questions about:
 
-- Drosophila brain anatomy, neuron types, and neural circuits
-- Gene expression patterns and transgenic constructs
-- Connectome data and neuronal connectivity
-- Morphological similarity analysis (NBLAST)
-- Developmental neurobiology and neuroblast lineages
-- Research techniques and methodologies used in fly neuroscience
-- VFB datasets, tools, and resources
-- Scientific papers and references related to fly brain research
-- Links to relevant publications and VFB documentation
+- Drosophila melanogaster (fruit fly) brain anatomy and neurobiology
+- Neural circuits and connectivity in flies
+- Gene expression patterns in the fly brain
+- Neuron morphology and classification
+- Brain region identification and relationships
+- Comparative neuroanatomy across species (fly-focused)
 
-Use VFB MCP tools to retrieve accurate, up-to-date information when available. When a user asks about a specific anatomy term, neuron, or brain region, try to use search_terms first to find the relevant VFB ID, then use get_term_info to get detailed information. Do not guess or fabricate VFB IDs or data. If tool calls fail or return errors, provide the best possible answer based on your training knowledge, and mention that you were unable to access the latest VFB data due to technical issues.
+Use VFB MCP tools strategically following this approach:
 
-If the MCP server appears to be unavailable (returning session ID errors), provide informative responses based on your knowledge of Drosophila neuroanatomy without attempting tool calls.
+1. START WITH SEARCH: When users ask about specific anatomy terms, neurons, or brain regions, use search_terms first to find relevant VFB entities. Use filter_types to narrow by entity type (e.g., ["neuron"], ["gene"], ["anatomy"]) and boost_types for prioritization (e.g., ["has_image", "has_neuron_connectivity"]).
+
+2. GET DETAILED INFO: Use get_term_info on promising IDs to get comprehensive metadata including SuperTypes, Tags, Images, and available Queries.
+
+3. EXPLORE RELATED DATA: Use run_query with different query_types based on Tags (PaintedDomains, SimilarMorphology, Connectivity).
+
+4. CONSTRUCT VISUALIZATIONS: When showing results, construct VFB browser URLs for 3D scenes using the format: https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=<focus_id>&i=<template_id>,<image_ids>
+
+Key guidelines:
+- Always put template ID first in i= parameter to ensure correct 3D coordinate space
+- Only combine images registered to the same template
+- Use filter_types like ["neuron", "adult", "has_image"] for specific queries
+- Check Tags to see what analyses are available for each entity
+- If tool calls fail, provide answers based on your training knowledge and mention the technical issue
 
 VFB MCP server: https://vfb3-mcp.virtualflybrain.org/ (JSON-RPC 2.0 API)
 
 Available tools:
-- get_term_info: Get detailed information about a VFB term by ID, including definitions, relationships, images, and references
-- search_terms: Search for VFB terms by keywords, with filtering by entity type, nervous system component, neurotransmitter, or dataset
-- run_query: Execute specific queries like morphological similarity (NBLAST) analysis
+- get_term_info(id): Get detailed metadata about VFB entities including images, relationships, and available analyses
+- search_terms(query, filter_types, boost_types): Search for VFB terms with optional filtering and boosting
+- run_query(id, query_type): Execute pre-computed analyses like expression domains or connectivity maps
 
-When providing information:
-- Include relevant scientific references and paper links when available
-- Explain VFB methodologies and techniques when asked
-- Provide thumbnail image URLs for visual data
-- Construct VFB 3D browser URLs for scenes: https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=<focus_id>&i=<template_id>,<image_ids>
-
-Limitations:
-- Only images aligned to the same template can be viewed together in 3D scenes
-- Only one term can be the focus per scene, but all term information is accessible in the chat
-
-Current scene context: id=${scene.id}, i=${scene.i}`
+Response strategy:
+1. Identify the scientific question and map to VFB capabilities
+2. Search for relevant terms using appropriate filters
+3. Get detailed information for promising results
+4. Run relevant queries based on available Tags
+5. Explain findings with scientific interpretation
+6. Suggest 3D visualizations when relevant data is available`
 
         // Initial messages
         const messages = [
@@ -178,40 +184,12 @@ Current scene context: id=${scene.id}, i=${scene.i}`
 
           // Check for tool calls
           if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-            // First, test if MCP server is available
-            let mcpAvailable = false
-            try {
-              const testResponse = await fetch('https://vfb3-mcp.virtualflybrain.org/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  jsonrpc: '2.0',
-                  method: 'system.describe',
-                  params: {},
-                  id: Date.now()
-                })
-              })
-              if (testResponse.ok) {
-                const testResult = await testResponse.json()
-                if (!testResult.error || !testResult.error.message.includes('session ID')) {
-                  mcpAvailable = true
-                }
-              }
-            } catch (testError) {
-              log('MCP server availability test failed', { error: testError.message })
-            }
-
-            if (!mcpAvailable) {
-              log('MCP server unavailable, skipping tool calls')
-              // Remove tool calls from assistant message so it provides a direct response
-              assistantMessage.tool_calls = []
-            } else {
-              log('MCP server available, processing tool calls', { count: assistantMessage.tool_calls.length })
-              
-              // Update status to show we're querying external data
-              sendEvent('status', { message: 'Querying the fly hive mind', phase: 'mcp' })
-              
-              for (const toolCall of assistantMessage.tool_calls) {
+            log('Processing tool calls', { count: assistantMessage.tool_calls.length })
+            
+            // Update status to show we're querying external data
+            sendEvent('status', { message: 'Querying the fly hive mind', phase: 'mcp' })
+            
+            for (const toolCall of assistantMessage.tool_calls) {
                 const toolStart = Date.now()
                 log('Executing tool call', { 
                   name: toolCall.function.name, 
