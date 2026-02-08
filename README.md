@@ -50,6 +50,7 @@ The project includes a GitHub Actions workflow (`.github/workflows/docker.yml`) 
 ## Usage
 
 - Access the app at `http://localhost:3000`
+- Without URL parameters, the chat starts with a welcome message and example queries
 - Append URL parameters for initial setup, e.g., `http://localhost:3000?query=medulla&i=VFB_00101567&id=VFB_00102107`
 - Chat with the assistant to explore VFB data
 - Click "Open in VFB 3D Browser" to view the scene

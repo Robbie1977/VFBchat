@@ -16,6 +16,21 @@ export default function Home() {
   useEffect(() => {
     if (initialQuery) {
       handleSend()
+    } else {
+      // Add welcome message when no initial query
+      setMessages([{
+        role: 'assistant',
+        content: `Welcome to VFB Chat! I'm here to help you explore Drosophila neuroanatomy and neuroscience using Virtual Fly Brain data.
+
+Here are some example queries you can try:
+- What neurons are involved in visual processing?
+- Show me images of Kenyon cells
+- How does the olfactory system work in flies?
+- Find neurons similar to DA1 using NBLAST
+- What genes are expressed in the antennal lobe?
+
+Feel free to ask about neural circuits, gene expression, connectome data, or any VFB-related topics!`
+      }])
     }
   }, [])
 
