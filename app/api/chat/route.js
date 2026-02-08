@@ -1,10 +1,157 @@
 import { NextResponse } from 'next/server'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import fs from 'fs'
+import path from 'path'
 
 function log(message, data = {}) {
   const timestamp = new Date().toISOString()
   console.log(`[${timestamp}] ${message}`, Object.keys(data).length ? data : '')
+}
+
+// Global lookup cache (persists across requests)
+let lookupCache = null
+let reverseLookupCache = null
+let normalizedLookupCache = null
+const CACHE_FILE = path.join(process.cwd(), 'vfb_lookup_cache.json')
+
+// Load lookup cache from file or fetch from MCP
+async function getLookupCache(mcpClient) {
+  if (lookupCache) {
+    return lookupCache
+  }
+
+  // Try to load from cache file first
+  try {
+    if (fs.existsSync(CACHE_FILE)) {
+      const cacheData = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'))
+      lookupCache = cacheData.lookup
+      reverseLookupCache = cacheData.reverseLookup
+      normalizedLookupCache = cacheData.normalizedLookup
+      log('Loaded lookup cache from file', { entries: Object.keys(lookupCache).length })
+      return lookupCache
+    }
+  } catch (error) {
+    log('Failed to load cache file', { error: error.message })
+  }
+
+  // Fetch fresh lookup data from MCP
+  try {
+    log('Fetching fresh lookup data from MCP...')
+    // Note: This assumes there's an MCP tool to get the complete lookup table
+    // For now, we'll build it incrementally from search results
+    lookupCache = {}
+    reverseLookupCache = {}
+    normalizedLookupCache = {}
+
+    // Save empty cache to start
+    saveLookupCache()
+    log('Initialized empty lookup cache')
+    return lookupCache
+  } catch (error) {
+    log('Failed to fetch lookup data', { error: error.message })
+    lookupCache = {}
+    return lookupCache
+  }
+}
+
+// Save lookup cache to file
+function saveLookupCache() {
+  try {
+    const cacheData = {
+      lookup: lookupCache || {},
+      reverseLookup: reverseLookupCache || {},
+      normalizedLookup: normalizedLookupCache || {},
+      lastUpdated: new Date().toISOString()
+    }
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(cacheData, null, 2))
+  } catch (error) {
+    log('Failed to save lookup cache', { error: error.message })
+  }
+}
+
+// Add entries to lookup cache
+function addToLookupCache(label, id) {
+  if (!lookupCache) return
+
+  lookupCache[label] = id
+  reverseLookupCache[id] = label
+
+  // Create normalized version for fuzzy matching
+  const normalized = normalizeKey(label)
+  if (!normalizedLookupCache[normalized]) {
+    normalizedLookupCache[normalized] = id
+  }
+
+  // Save periodically (every 100 additions)
+  if (Object.keys(lookupCache).length % 100 === 0) {
+    saveLookupCache()
+  }
+}
+
+// Normalize key for fuzzy matching (similar to VFB_connect)
+function normalizeKey(key) {
+  return key.toLowerCase()
+    .replace(/_/g, '')
+    .replace(/-/g, '')
+    .replace(/\s+/g, '')
+    .replace(/:/g, '')
+    .replace(/;/g, '')
+}
+
+// Replace VFB terms in text with markdown links
+function replaceTermsWithLinks(text) {
+  if (!text || !lookupCache) return text
+
+  // Sort terms by length (longest first) to avoid partial matches
+  const sortedTerms = Object.keys(lookupCache)
+    .filter(term => term.length > 2) // Skip very short terms
+    .sort((a, b) => b.length - a.length)
+
+  let result = text
+
+  // Replace each term with markdown link
+  for (const term of sortedTerms) {
+    const id = lookupCache[term]
+    // Use word boundaries to avoid partial matches within words
+    const regex = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi')
+    const link = `[${term}](${id})`
+    result = result.replace(regex, link)
+  }
+
+  return result
+}
+
+// Local term resolution (fast lookup)
+function resolveTermLocally(term) {
+  if (!lookupCache) return null
+
+  // Exact match
+  if (lookupCache[term]) {
+    return lookupCache[term]
+  }
+
+  // Reverse lookup (if it's already an ID)
+  if (reverseLookupCache[term]) {
+    return term
+  }
+
+  // Normalized fuzzy match
+  const normalized = normalizeKey(term)
+  if (normalizedLookupCache[normalized]) {
+    return normalizedLookupCache[normalized]
+  }
+
+  // Partial matches
+  const partialMatches = Object.keys(lookupCache).filter(key =>
+    key.toLowerCase().includes(term.toLowerCase())
+  )
+
+  if (partialMatches.length === 1) {
+    return lookupCache[partialMatches[0]]
+  }
+
+  return null
 }
 
 export async function POST(request) {
@@ -41,6 +188,9 @@ export async function POST(request) {
           log('Connecting to MCP server...')
           await mcpClient.connect(mcpTransport)
           log('MCP client connected successfully')
+
+          // Initialize lookup cache for fast term resolution
+          await getLookupCache(mcpClient)
         } catch (connectError) {
           log('MCP client connection failed', { error: connectError.message })
           // Continue without MCP - the LLM will handle it gracefully
@@ -144,8 +294,9 @@ Use VFB MCP tools strategically following this approach:
    - If _truncation.canRequestMore is true, call search_terms again with start=10, rows=10 to get the next batch
    - Continue with start=20, start=30, etc. as needed
    - Use smaller rows values (5-10) for focused searches to avoid overwhelming responses
+   - When _truncation.exactMatch is true, detailed term information is automatically pre-fetched and available in response._term_info
 
-3. GET DETAILED INFO: Use get_term_info on the most promising 1-3 IDs from search results to get comprehensive metadata including SuperTypes, Tags, Images, and available Queries.
+3. GET DETAILED INFO: Use get_term_info on the most promising 1-3 IDs from search results to get comprehensive metadata including SuperTypes, Tags, Images, and available Queries. If an exact match was found, check response._term_info for pre-fetched details.
 
 4. EXPLORE RELATED DATA: Use run_query with different query_types based on Tags (PaintedDomains, SimilarMorphology, Connectivity) for entities that support these analyses.
 
@@ -276,6 +427,18 @@ Common query patterns:
             contentLength: assistantMessage.content?.length || 0
           })
 
+          // Replace VFB terms in assistant response with markdown links
+          if (assistantMessage.content) {
+            const originalContent = assistantMessage.content
+            assistantMessage.content = replaceTermsWithLinks(assistantMessage.content)
+            if (originalContent !== assistantMessage.content) {
+              log('Replaced terms with links', { 
+                originalLength: originalContent.length,
+                newLength: assistantMessage.content.length 
+              })
+            }
+          }
+
           messages.push(assistantMessage)
 
           // Check for tool calls
@@ -300,11 +463,32 @@ Common query patterns:
                 try {
                   let toolResult = null
 
+                  // FAST LOCAL TERM RESOLUTION: Try local cache first for get_term_info
+                  if (toolCall.function.name === 'get_term_info' && toolCall.function.arguments?.id) {
+                    const localId = resolveTermLocally(toolCall.function.arguments.id)
+                    if (localId && localId !== toolCall.function.arguments.id) {
+                      log('Local term resolution', { 
+                        input: toolCall.function.arguments.id, 
+                        resolved: localId 
+                      })
+                      // Update the arguments with resolved ID
+                      toolCall.function.arguments.id = localId
+                    }
+                  }
+
+                  // Modify arguments for search_terms to limit results
+                  let callArgs = toolCall.function.arguments
+                  if (toolCall.function.name === 'search_terms') {
+                    callArgs = { ...callArgs }
+                    if (callArgs.rows === undefined) callArgs.rows = 10
+                    if (callArgs.start === undefined) callArgs.start = 0
+                  }
+
                   // Use MCP client to call the tool
                   if (mcpClient.getServerCapabilities()?.tools) {
                     const result = await mcpClient.callTool({
                       name: toolCall.function.name,
-                      arguments: toolCall.function.arguments
+                      arguments: callArgs
                     })
                     toolResult = result
                   } else {
@@ -325,6 +509,24 @@ Common query patterns:
                   if (toolCall.function.name === 'search_terms' && toolResult?.content?.[0]?.text) {
                     try {
                       const parsedResult = JSON.parse(toolResult.content[0].text)
+                      
+                      // POPULATE CACHE: Add label->ID mappings from search results
+                      if (parsedResult?.response?.docs) {
+                        parsedResult.response.docs.forEach(doc => {
+                          if (doc.label && doc.short_form) {
+                            addToLookupCache(doc.label, doc.short_form)
+                          }
+                          // Also add synonyms if available
+                          if (doc.synonym && Array.isArray(doc.synonym)) {
+                            doc.synonym.forEach(syn => {
+                              if (syn && doc.short_form) {
+                                addToLookupCache(syn, doc.short_form)
+                              }
+                            })
+                          }
+                        })
+                        log('Added search results to lookup cache', { count: parsedResult.response.docs.length })
+                      }
                       
                       if (parsedResult?.response?.docs) {
                         const query = toolCall.function.arguments?.query?.toLowerCase() || ''
@@ -347,6 +549,18 @@ Common query patterns:
                           minimizedDocs = [exactMatch]
                           truncationInfo = { exactMatch: true, totalAvailable: originalCount }
                           log('Found exact label match, returning single result', { label: exactMatch.label })
+                          
+                          // Pre-fetch term info for the exact match
+                          try {
+                            const termInfoResult = await mcpClient.callTool({
+                              name: 'get_term_info',
+                              arguments: { id: exactMatch.short_form }
+                            })
+                            parsedResult._term_info = termInfoResult
+                            log('Pre-fetched term info for exact match', { id: exactMatch.short_form })
+                          } catch (termInfoError) {
+                            log('Failed to pre-fetch term info', { error: termInfoError.message, id: exactMatch.short_form })
+                          }
                         } else if (isPaginatedRequest) {
                           // For paginated requests, return all requested results (up to reasonable limit)
                           minimizedDocs = parsedResult.response.docs.slice(0, Math.min(rows, 50))
@@ -399,6 +613,35 @@ Common query patterns:
                     }
                   }
 
+                  // POPULATE CACHE: Add additional mappings from get_term_info results
+                  if (toolCall.function.name === 'get_term_info' && toolResult?.content?.[0]?.text) {
+                    try {
+                      const termInfo = JSON.parse(toolResult.content[0].text)
+                      if (termInfo && termInfo.term && termInfo.term.core) {
+                        const core = termInfo.term.core
+                        const id = core.short_form
+                        
+                        // Add label
+                        if (core.label) {
+                          addToLookupCache(core.label, id)
+                        }
+                        
+                        // Add synonyms
+                        if (core.synonyms && Array.isArray(core.synonyms)) {
+                          core.synonyms.forEach(syn => {
+                            if (syn && syn.label) {
+                              addToLookupCache(syn.label, id)
+                            }
+                          })
+                        }
+                        
+                        log('Added term info to lookup cache', { id, label: core.label })
+                      }
+                    } catch (error) {
+                      log('Failed to parse term info for cache', { error: error.message })
+                    }
+                  }
+
                   // DEBUG: Log what content will be sent to LLM
                   const toolContent = JSON.stringify(toolResult)
                   console.log('🔍 TOOL CONTENT TO LLM:', toolContent.substring(0, 500) + (toolContent.length > 500 ? '...' : ''))
@@ -434,6 +677,8 @@ Common query patterns:
           } else {
             // No tool calls - this is the final response
             finalResponse = assistantMessage.content || ''
+            // Replace VFB terms with markdown links in final response
+            finalResponse = replaceTermsWithLinks(finalResponse)
             log('Final response generated', { length: finalResponse.length })
             break
           }
@@ -474,6 +719,8 @@ Common query patterns:
           if (finalOllamaResponse.ok) {
             const finalData = await finalOllamaResponse.json()
             finalResponse = finalData.message?.content || 'I apologize, but I was unable to generate a complete response. Please try rephrasing your question.'
+            // Replace VFB terms with markdown links in fallback response
+            finalResponse = replaceTermsWithLinks(finalResponse)
             log('Fallback response generated', { length: finalResponse.length })
           } else {
             finalResponse = 'I apologize, but there was an error generating the response. Please try again.'
