@@ -31,6 +31,13 @@ A web-based chat client for exploring Virtual Fly Brain (VFB) data and Drosophil
 ### Local Development
 Follow the Setup steps above.
 
+For development without Docker:
+1. Install Ollama locally: https://ollama.ai/download
+2. Start Ollama: `ollama serve`
+3. Pull the model: `ollama pull microsoft/phi3:3.8b`
+4. Run the app: `npm run dev`
+5. The app will connect to Ollama at `http://localhost:11434`
+
 ### Docker Hub Deployment via GitHub Actions
 The project includes a GitHub Actions workflow (`.github/workflows/docker.yml`) that automatically builds and pushes Docker images to Docker Hub on pushes and pull requests.
 
@@ -85,7 +92,8 @@ The project includes a GitHub Actions workflow (`.github/workflows/docker.yml`) 
 
 ## Development
 
-- Run locally: `npm run dev` (requires Ollama running separately).
+- **Docker**: `docker-compose up --build` (includes Ollama)
+- **Local**: `npm run dev` (requires Ollama running separately on localhost:11434)
 - Build: `npm run build`
 - API: POST to `/api/chat` with `{ message, scene }`
 

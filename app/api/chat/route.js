@@ -40,7 +40,8 @@ Current scene context: id=${scene.id}, i=${scene.i}
 User query: ${message}`
 
   // Call Ollama
-  const ollamaResponse = await fetch('http://ollama:11434/api/generate', {
+  const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
+  const ollamaResponse = await fetch(`${ollamaUrl}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

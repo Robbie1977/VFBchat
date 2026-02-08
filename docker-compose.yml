@@ -17,6 +17,7 @@ services:
       - ollama
     environment:
       - NODE_ENV=production
+      - OLLAMA_URL=http://ollama:11434
 
 volumes:
   ollama_data:
