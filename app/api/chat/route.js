@@ -44,9 +44,12 @@ async function getLookupCache(mcpClient) {
     reverseLookupCache = {}
     normalizedLookupCache = {}
 
-    // Save empty cache to start
+    // Seed with common VFB terms
+    seedLookupCache()
+
+    // Save cache to start
     saveLookupCache()
-    log('Initialized empty lookup cache')
+    log('Initialized lookup cache with seeded terms', { entries: Object.keys(lookupCache).length })
     return lookupCache
   } catch (error) {
     log('Failed to fetch lookup data', { error: error.message })
@@ -120,6 +123,34 @@ function replaceTermsWithLinks(text) {
   }
 
   return result
+}
+
+// Initialize cache with common VFB terms
+function seedLookupCache() {
+  const commonTerms = {
+    'medulla': 'FBbt_00003748',
+    'adult brain': 'FBbt_00003624',
+    'antennal lobe': 'FBbt_00007484',
+    'optic lobe': 'FBbt_00003625',
+    'central complex': 'FBbt_00003629',
+    'mushroom body': 'FBbt_00003630',
+    'protocerebrum': 'FBbt_00003631',
+    'deutocerebrum': 'FBbt_00003632',
+    'tritocerebrum': 'FBbt_00003633',
+    'Kenyon cell': 'FBbt_00003634',
+    'olfactory receptor neuron': 'FBbt_00007485',
+    'photoreceptor cell': 'FBbt_00003636',
+    'visual system': 'FBbt_00003637',
+    'motor neuron': 'FBbt_00003638',
+    'sensory neuron': 'FBbt_00003639',
+    'glial cell': 'FBbt_00003640'
+  }
+
+  Object.entries(commonTerms).forEach(([term, id]) => {
+    addToLookupCache(term, id)
+  })
+
+  log('Seeded lookup cache with common VFB terms', { count: Object.keys(commonTerms).length })
 }
 
 // Local term resolution (fast lookup)
