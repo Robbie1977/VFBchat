@@ -148,8 +148,8 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
           </div>
         ))}
         {isThinking && (
-          <div style={{ marginBottom: 10 }}>
-            <strong>VFB:</strong> Querying the fly hive mind{thinkingDots}
+          <div style={{ marginBottom: 10, fontSize: '0.9em', fontStyle: 'italic', color: '#666' }}>
+            Querying the fly hive mind{thinkingDots}
           </div>
         )}
       </div>
