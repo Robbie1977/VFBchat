@@ -184,6 +184,10 @@ Common query patterns:
           const ollamaStart = Date.now()
           log('Calling Ollama API', { iteration: iteration + 1, messageCount: messages.length })
           
+          // Set up timeout for Ollama calls (5 minutes)
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 300000) // 5 minutes
+          
           const ollamaResponse = await fetch(`${ollamaUrl}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -192,8 +196,19 @@ Common query patterns:
               messages: messages,
               tools: tools,
               stream: false
-            })
+            }),
+            signal: controller.signal
           })
+          
+          clearTimeout(timeoutId)
+
+          // Check for timeout
+          if (ollamaResponse.status === undefined) {
+            log('Ollama API timeout')
+            sendEvent('error', { message: 'Error: Ollama API request timed out (5 minutes)' })
+            controller.close()
+            return
+          }
 
           const ollamaDuration = Date.now() - ollamaStart
           log('Ollama API response received', { duration: `${ollamaDuration}ms`, status: ollamaResponse.status })
@@ -316,6 +331,10 @@ Common query patterns:
           const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
           const fallbackStart = Date.now()
           
+          // Set up timeout for fallback Ollama call (3 minutes)
+          const fallbackController = new AbortController()
+          const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 180000) // 3 minutes
+          
           const finalOllamaResponse = await fetch(`${ollamaUrl}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -323,9 +342,18 @@ Common query patterns:
               model: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
               messages: messages,
               stream: false
-            })
+            }),
+            signal: fallbackController.signal
           })
-
+          
+          clearTimeout(fallbackTimeoutId)
+          // Check for timeout
+          if (fallbackResponse.status === undefined) {
+            log('Fallback Ollama API timeout')
+            sendEvent('error', { message: 'Error: Fallback Ollama API request timed out (3 minutes)' })
+            controller.close()
+            return
+          }
           const fallbackDuration = Date.now() - fallbackStart
           log('Fallback Ollama call completed', { duration: `${fallbackDuration}ms`, status: finalOllamaResponse.status })
 
