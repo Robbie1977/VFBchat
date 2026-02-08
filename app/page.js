@@ -14,6 +14,7 @@ export default function Home() {
   const [scene, setScene] = useState({ id: existingId, i: existingI })
   const [isThinking, setIsThinking] = useState(false)
   const [thinkingDots, setThinkingDots] = useState('.')
+  const [thinkingMessage, setThinkingMessage] = useState('Thinking')
 
   useEffect(() => {
     if (isThinking) {
@@ -52,34 +53,74 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
     setMessages(prev => [...prev, userMessage])
     setInput('')
     setIsThinking(true)
+    setThinkingMessage('Thinking')
 
     const requestStart = Date.now()
     console.log(`[Frontend] Sending chat request: "${input.substring(0, 50)}..."`)
 
     try {
-      // Call API
+      // Call API with streaming
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: input, scene })
       })
 
-      const requestDuration = Date.now() - requestStart
-      console.log(`[Frontend] API response received in ${requestDuration}ms, status: ${response.status}`)
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
 
-      const data = await response.json()
-      const botMessage = { role: 'assistant', content: data.response, images: data.images }
-      setMessages(prev => [...prev, botMessage])
-      if (data.newScene) setScene(data.newScene)
+      let buffer = ''
+      let currentEvent = ''
       
-      console.log(`[Frontend] Response processed: ${data.response.substring(0, 100)}... (${data.images?.length || 0} images)`)
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.slice(7)
+          } else if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              
+              if (currentEvent === 'status') {
+                setThinkingMessage(data.message)
+              } else if (currentEvent === 'result') {
+                const botMessage = { role: 'assistant', content: data.response, images: data.images }
+                setMessages(prev => [...prev, botMessage])
+                if (data.newScene) setScene(data.newScene)
+                
+                const requestDuration = Date.now() - requestStart
+                console.log(`[Frontend] Response processed in ${requestDuration}ms: ${data.response.substring(0, 100)}... (${data.images?.length || 0} images)`)
+                setIsThinking(false)
+                return
+              } else if (currentEvent === 'error') {
+                const errorMessage = { role: 'assistant', content: data.message }
+                setMessages(prev => [...prev, errorMessage])
+                setIsThinking(false)
+                return
+              }
+            } catch (parseError) {
+              console.error('Failed to parse streaming data:', parseError)
+            }
+          }
+        }
+      }
+
+      const requestDuration = Date.now() - requestStart
+      console.log(`[Frontend] Stream ended after ${requestDuration}ms`)
+
     } catch (error) {
       const requestDuration = Date.now() - requestStart
       console.log(`[Frontend] Request failed after ${requestDuration}ms: ${error.message}`)
       
       const errorMessage = { role: 'assistant', content: 'Sorry, there was an error processing your request. Please try again.' }
       setMessages(prev => [...prev, errorMessage])
-    } finally {
       setIsThinking(false)
     }
   }
@@ -149,7 +190,7 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
         ))}
         {isThinking && (
           <div style={{ marginBottom: 10, fontSize: '0.9em', fontStyle: 'italic', color: '#666' }}>
-            Querying the fly hive mind{thinkingDots}
+            {thinkingMessage}{thinkingDots}
           </div>
         )}
       </div>
