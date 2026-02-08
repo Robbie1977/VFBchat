@@ -8,7 +8,7 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     entrypoint: /bin/sh
-    command: -c "ollama serve & sleep 10 && ollama pull phi3:3.8b && wait"
+    command: -c "ollama serve & sleep 10 && ollama pull ${OLLAMA_MODEL:-qwen2.5:7b} && wait"
 
   app:
     build: .
@@ -19,6 +19,7 @@ services:
     environment:
       - NODE_ENV=production
       - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
 
 volumes:
   ollama_data:

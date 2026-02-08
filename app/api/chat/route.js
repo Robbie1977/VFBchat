@@ -81,7 +81,7 @@ export async function POST(request) {
 - Scientific papers and references related to fly brain research
 - Links to relevant publications and VFB documentation
 
-Use VFB MCP tools to retrieve accurate, up-to-date information. If a question is completely unrelated to Drosophila neuroscience or VFB, politely decline and suggest redirecting to VFB-related topics.
+Use VFB MCP tools to retrieve accurate, up-to-date information. When a user asks about a specific anatomy term, neuron, or brain region, ALWAYS use search_terms first to find the relevant VFB ID, then use get_term_info to get detailed information. Do not guess or fabricate VFB IDs or data. If a question is completely unrelated to Drosophila neuroscience or VFB, politely decline and suggest redirecting to VFB-related topics.
 
 VFB MCP server: https://vfb3-mcp.virtualflybrain.org/
 
@@ -118,7 +118,7 @@ Current scene context: id=${scene.id}, i=${scene.i}`
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'phi3:3.8b',
+          model: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
           messages: messages,
           tools: tools,
           stream: false

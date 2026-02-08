@@ -1,6 +1,6 @@
 # VFB Chat Client
 
-A web-based chat client for exploring Virtual Fly Brain (VFB) data and Drosophila neuroscience using a guardrailed Microsoft Phi-3 mini LLM connected to the VFB MCP server.
+A web-based chat client for exploring Virtual Fly Brain (VFB) data and Drosophila neuroscience using a guardrailed LLM with tool calling, connected to the VFB MCP server via Ollama.
 
 ## Features
 
@@ -17,9 +17,9 @@ A web-based chat client for exploring Virtual Fly Brain (VFB) data and Drosophil
 
 2. Clone this repository.
 
-3. Run `docker-compose up --build` to start the services. The Phi-3 model will be automatically pulled on first startup.
+3. Run `docker-compose up --build` to start the services. The default model (`qwen2.5:7b`) will be automatically pulled on first startup.
 
-4. Configure the LLM to use the VFB MCP server at `https://vfb3-mcp.virtualflybrain.org/`. This may require custom setup depending on the LLM client used with Ollama. Ensure tool calling is enabled for Phi-3 to access MCP tools.
+4. To use a different model, set the `OLLAMA_MODEL` environment variable: `OLLAMA_MODEL=llama3.1:8b docker-compose up --build`. The model must support Ollama tool calling.
 
 ## Deployment
 
@@ -29,7 +29,7 @@ Follow the Setup steps above.
 For development without Docker:
 1. Install Ollama locally: https://ollama.ai/download
 2. Start Ollama: `ollama serve`
-3. Pull the model: `ollama pull phi3:3.8b`
+3. Pull the model: `ollama pull qwen2.5:7b`
 4. Run the app: `npm run dev`
 5. The app will connect to Ollama at `http://localhost:11434`
 
@@ -59,11 +59,11 @@ The project includes a GitHub Actions workflow (`.github/workflows/docker.yml`) 
 
 ## LLM Configuration
 
-- **Model**: Microsoft Phi-3 mini (3.8B parameters)
+- **Model**: Default is Qwen 2.5 (7B parameters), configurable via `OLLAMA_MODEL` env var. Must support Ollama tool calling.
 - **Guardrailing**: Implemented via system prompt allowing responses about Drosophila neuroscience, VFB data/tools, research papers, and methodologies while using MCP tools for accurate information.
-- **MCP Integration**: The LLM should be configured to call VFB MCP tools (`get_term_info`, `search_terms`, `run_query`).
+- **MCP Integration**: The LLM calls VFB MCP tools (`get_term_info`, `search_terms`, `run_query`) via Ollama's native tool calling API.
 - **Resource Requirements**: Runs on CPU-only, minimal RAM (~4-8GB), no GPU needed.
-- **Changing Models**: If switching to another model (e.g., Llama 3.2 1B), update the Ollama pull command and ensure compatibility with tool calling and MCP. Update the model name in `app/api/chat/route.js`.
+- **Changing Models**: Set `OLLAMA_MODEL=modelname:tag` environment variable. The model must support Ollama tool calling. Known compatible models: `qwen2.5:7b`, `llama3.1:8b`, `qwen3:8b`.
 
 ## VFB MCP Details
 
