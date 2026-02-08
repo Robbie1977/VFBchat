@@ -12,6 +12,17 @@ export default function Home() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState(initialQuery)
   const [scene, setScene] = useState({ id: existingId, i: existingI })
+  const [isThinking, setIsThinking] = useState(false)
+  const [thinkingDots, setThinkingDots] = useState('.')
+
+  useEffect(() => {
+    if (isThinking) {
+      const interval = setInterval(() => {
+        setThinkingDots(prev => prev === '...' ? '.' : prev + '.')
+      }, 500)
+      return () => clearInterval(interval)
+    }
+  }, [isThinking])
 
   useEffect(() => {
     if (initialQuery) {
@@ -40,6 +51,7 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
     const userMessage = { role: 'user', content: input }
     setMessages(prev => [...prev, userMessage])
     setInput('')
+    setIsThinking(true)
 
     try {
       // Call API
@@ -55,6 +67,8 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
     } catch (error) {
       const errorMessage = { role: 'assistant', content: 'Sorry, there was an error processing your request. Please try again.' }
       setMessages(prev => [...prev, errorMessage])
+    } finally {
+      setIsThinking(false)
     }
   }
 
@@ -121,6 +135,11 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
             ))}
           </div>
         ))}
+        {isThinking && (
+          <div style={{ marginBottom: 10 }}>
+            <strong>VFB:</strong> Querying the fly hive mind{thinkingDots}
+          </div>
+        )}
       </div>
       <input
         value={input}
