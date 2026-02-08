@@ -98,9 +98,9 @@ export async function POST(request) {
 - Scientific papers and references related to fly brain research
 - Links to relevant publications and VFB documentation
 
-Use VFB MCP tools to retrieve accurate, up-to-date information. When a user asks about a specific anatomy term, neuron, or brain region, ALWAYS use search_terms first to find the relevant VFB ID, then use get_term_info to get detailed information. Do not guess or fabricate VFB IDs or data. If a question is completely unrelated to Drosophila neuroscience or VFB, politely decline and suggest redirecting to VFB-related topics.
+Use VFB MCP tools to retrieve accurate, up-to-date information when available. When a user asks about a specific anatomy term, neuron, or brain region, try to use search_terms first to find the relevant VFB ID, then use get_term_info to get detailed information. Do not guess or fabricate VFB IDs or data. If tool calls fail or return errors, provide the best possible answer based on your training knowledge, and mention that you were unable to access the latest VFB data due to technical issues.
 
-If tool calls fail or return errors, provide the best possible answer based on your training knowledge, and mention that you were unable to access the latest VFB data due to technical issues.
+If the MCP server appears to be unavailable (returning session ID errors), provide informative responses based on your knowledge of Drosophila neuroanatomy without attempting tool calls.
 
 VFB MCP server: https://vfb3-mcp.virtualflybrain.org/ (JSON-RPC 2.0 API)
 
@@ -178,12 +178,41 @@ Current scene context: id=${scene.id}, i=${scene.i}`
 
           // Check for tool calls
           if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-            log('Processing tool calls', { count: assistantMessage.tool_calls.length })
-            
-            // Update status to show we're querying external data
-            sendEvent('status', { message: 'Querying the fly hive mind', phase: 'mcp' })
-            
-            for (const toolCall of assistantMessage.tool_calls) {
+            // First, test if MCP server is available
+            let mcpAvailable = false
+            try {
+              const testResponse = await fetch('https://vfb3-mcp.virtualflybrain.org/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jsonrpc: '2.0',
+                  method: 'system.describe',
+                  params: {},
+                  id: Date.now()
+                })
+              })
+              if (testResponse.ok) {
+                const testResult = await testResponse.json()
+                if (!testResult.error || !testResult.error.message.includes('session ID')) {
+                  mcpAvailable = true
+                }
+              }
+            } catch (testError) {
+              log('MCP server availability test failed', { error: testError.message })
+            }
+
+            if (!mcpAvailable) {
+              log('MCP server unavailable, skipping tool calls')
+              // Remove tool calls from assistant message so it provides a direct response
+              assistantMessage.tool_calls = []
+              assistantMessage.content = assistantMessage.content || 'I apologize, but the VFB data service is currently unavailable. I\'ll provide information based on my training knowledge.'
+            } else {
+              log('MCP server available, processing tool calls', { count: assistantMessage.tool_calls.length })
+              
+              // Update status to show we're querying external data
+              sendEvent('status', { message: 'Querying the fly hive mind', phase: 'mcp' })
+              
+              for (const toolCall of assistantMessage.tool_calls) {
               const toolStart = Date.now()
               log('Executing tool call', { 
                 name: toolCall.function.name, 
