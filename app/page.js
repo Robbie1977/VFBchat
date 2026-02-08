@@ -53,6 +53,9 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
     setInput('')
     setIsThinking(true)
 
+    const requestStart = Date.now()
+    console.log(`[Frontend] Sending chat request: "${input.substring(0, 50)}..."`)
+
     try {
       // Call API
       const response = await fetch('/api/chat', {
@@ -60,11 +63,20 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: input, scene })
       })
+
+      const requestDuration = Date.now() - requestStart
+      console.log(`[Frontend] API response received in ${requestDuration}ms, status: ${response.status}`)
+
       const data = await response.json()
       const botMessage = { role: 'assistant', content: data.response, images: data.images }
       setMessages(prev => [...prev, botMessage])
       if (data.newScene) setScene(data.newScene)
+      
+      console.log(`[Frontend] Response processed: ${data.response.substring(0, 100)}... (${data.images?.length || 0} images)`)
     } catch (error) {
+      const requestDuration = Date.now() - requestStart
+      console.log(`[Frontend] Request failed after ${requestDuration}ms: ${error.message}`)
+      
       const errorMessage = { role: 'assistant', content: 'Sorry, there was an error processing your request. Please try again.' }
       setMessages(prev => [...prev, errorMessage])
     } finally {

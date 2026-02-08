@@ -1,7 +1,15 @@
 import { NextResponse } from 'next/server'
 
+function log(message, data = {}) {
+  const timestamp = new Date().toISOString()
+  console.log(`[${timestamp}] ${message}`, Object.keys(data).length ? data : '')
+}
+
 export async function POST(request) {
+  const startTime = Date.now()
   const { message, scene } = await request.json()
+  
+  log('Chat API request received', { message: message.substring(0, 100), scene })
 
   try {
     // Define MCP tools for Ollama
@@ -112,8 +120,13 @@ Current scene context: id=${scene.id}, i=${scene.i}`
     const maxIterations = 3
 
     for (let iteration = 0; iteration < maxIterations; iteration++) {
+      log(`Starting iteration ${iteration + 1}/${maxIterations}`)
+      
       // Call Ollama with tool calling
       const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
+      const ollamaStart = Date.now()
+      log('Calling Ollama API', { iteration: iteration + 1, messageCount: messages.length })
+      
       const ollamaResponse = await fetch(`${ollamaUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -125,8 +138,12 @@ Current scene context: id=${scene.id}, i=${scene.i}`
         })
       })
 
+      const ollamaDuration = Date.now() - ollamaStart
+      log('Ollama API response received', { duration: `${ollamaDuration}ms`, status: ollamaResponse.status })
+
       if (!ollamaResponse.ok) {
         const errorText = await ollamaResponse.text()
+        log('Ollama API error', { error: errorText })
         return NextResponse.json({
           response: `Error: Ollama API error - ${errorText}`,
           images: [],
@@ -138,14 +155,29 @@ Current scene context: id=${scene.id}, i=${scene.i}`
       const assistantMessage = ollamaData.message
 
       if (!assistantMessage) {
+        log('No assistant message in Ollama response')
         break
       }
+
+      log('Assistant message received', { 
+        hasContent: !!assistantMessage.content,
+        toolCallsCount: assistantMessage.tool_calls?.length || 0,
+        contentLength: assistantMessage.content?.length || 0
+      })
 
       messages.push(assistantMessage)
 
       // Check for tool calls
       if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+        log('Processing tool calls', { count: assistantMessage.tool_calls.length })
+        
         for (const toolCall of assistantMessage.tool_calls) {
+          const toolStart = Date.now()
+          log('Executing tool call', { 
+            name: toolCall.function.name, 
+            args: JSON.stringify(toolCall.function.arguments).substring(0, 200) 
+          })
+          
           try {
             let toolResult = null
 
@@ -181,6 +213,13 @@ Current scene context: id=${scene.id}, i=${scene.i}`
               toolResult = await response.json()
             }
 
+            const toolDuration = Date.now() - toolStart
+            log('Tool call completed', { 
+              name: toolCall.function.name, 
+              duration: `${toolDuration}ms`,
+              resultSize: JSON.stringify(toolResult).length 
+            })
+
             // Add tool result to conversation
             messages.push({
               role: 'tool',
@@ -189,6 +228,13 @@ Current scene context: id=${scene.id}, i=${scene.i}`
             })
 
           } catch (toolError) {
+            const toolDuration = Date.now() - toolStart
+            log('Tool call failed', { 
+              name: toolCall.function.name, 
+              duration: `${toolDuration}ms`,
+              error: toolError.message 
+            })
+            
             messages.push({
               role: 'tool',
               content: `Error executing ${toolCall.function.name}: ${toolError.message}`,
@@ -199,7 +245,37 @@ Current scene context: id=${scene.id}, i=${scene.i}`
       } else {
         // Final response
         finalResponse = assistantMessage.content || ''
+        log('Final response generated', { length: finalResponse.length })
         break
+      }
+    }
+
+    // If no final response after max iterations, get one without tools
+    if (!finalResponse) {
+      log('No final response after max iterations, making fallback call')
+      const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
+      const fallbackStart = Date.now()
+      
+      const finalOllamaResponse = await fetch(`${ollamaUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
+          messages: messages,
+          stream: false
+        })
+      })
+
+      const fallbackDuration = Date.now() - fallbackStart
+      log('Fallback Ollama call completed', { duration: `${fallbackDuration}ms`, status: finalOllamaResponse.status })
+
+      if (finalOllamaResponse.ok) {
+        const finalData = await finalOllamaResponse.json()
+        finalResponse = finalData.message?.content || 'I apologize, but I was unable to generate a complete response. Please try rephrasing your question.'
+        log('Fallback response generated', { length: finalResponse.length })
+      } else {
+        finalResponse = 'I apologize, but there was an error generating the response. Please try again.'
+        log('Fallback call failed, using error message')
       }
     }
 
@@ -218,9 +294,19 @@ Current scene context: id=${scene.id}, i=${scene.i}`
       })
     }
 
+    const totalDuration = Date.now() - startTime
+    log('Chat API request completed', { 
+      totalDuration: `${totalDuration}ms`, 
+      responseLength: finalResponse.length, 
+      imagesCount: images.length 
+    })
+
     return NextResponse.json({ response: finalResponse, images, newScene: scene })
 
   } catch (error) {
+    const totalDuration = Date.now() - startTime
+    log('Chat API request failed', { totalDuration: `${totalDuration}ms`, error: error.message })
+    
     console.error('Chat API error:', error)
     return NextResponse.json({
       response: `Error: ${error.message}`,
