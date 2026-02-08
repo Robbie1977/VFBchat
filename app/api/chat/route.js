@@ -11,6 +11,43 @@ export async function POST(request) {
   
   log('Chat API request received', { message: message.substring(0, 100), scene })
 
+  // Initialize MCP connection
+  try {
+    const mcpUrl = 'https://vfb3-mcp.virtualflybrain.org/'
+    const initRequest = {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2024-11-05',
+        capabilities: {
+          tools: {}
+        },
+        clientInfo: {
+          name: 'vfb-chat-client',
+          version: '1.0.0'
+        }
+      }
+    }
+
+    log('Initializing MCP connection')
+    const initResponse = await fetch(mcpUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(initRequest)
+    })
+
+    if (!initResponse.ok) {
+      log('MCP initialization failed', { status: initResponse.status })
+    } else {
+      const initResult = await initResponse.json()
+      log('MCP initialized successfully', { serverInfo: initResult.result?.serverInfo })
+    }
+  } catch (initError) {
+    log('MCP initialization error', { error: initError.message })
+    // Continue anyway - some servers might not require initialization
+  }
+
   try {
     // Define MCP tools for Ollama
     const tools = [
@@ -91,7 +128,9 @@ export async function POST(request) {
 
 Use VFB MCP tools to retrieve accurate, up-to-date information. When a user asks about a specific anatomy term, neuron, or brain region, ALWAYS use search_terms first to find the relevant VFB ID, then use get_term_info to get detailed information. Do not guess or fabricate VFB IDs or data. If a question is completely unrelated to Drosophila neuroscience or VFB, politely decline and suggest redirecting to VFB-related topics.
 
-VFB MCP server: https://vfb3-mcp.virtualflybrain.org/
+If tool calls fail or return errors, provide the best possible answer based on your training knowledge, and mention that you were unable to access the latest VFB data due to technical issues.
+
+VFB MCP server: https://vfb3-mcp.virtualflybrain.org/ (JSON-RPC 2.0 protocol)
 
 Available tools:
 - get_term_info: Get detailed information about a VFB term by ID, including definitions, relationships, images, and references
@@ -179,38 +218,55 @@ Current scene context: id=${scene.id}, i=${scene.i}`
           })
           
           try {
-            let toolResult = null
+            // Call MCP server using JSON-RPC protocol
+            const mcpUrl = 'https://vfb3-mcp.virtualflybrain.org/'
+            
+            const mcpRequest = {
+              jsonrpc: '2.0',
+              id: Date.now(), // Use timestamp as unique ID
+              method: 'tools/call',
+              params: {
+                name: toolCall.function.name,
+                arguments: toolCall.function.arguments
+              }
+            }
 
-            // Call appropriate MCP endpoint
-            const mcpServerUrl = 'https://vfb3-mcp.virtualflybrain.org/'
+            log('Calling MCP server', { method: mcpRequest.method, tool: toolCall.function.name })
+            
+            const response = await fetch(mcpUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(mcpRequest)
+            })
 
-            if (toolCall.function.name === 'get_term_info') {
-              const response = await fetch(`${mcpServerUrl}get_term_info`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: toolCall.function.arguments.id })
-              })
-              toolResult = await response.json()
-            } else if (toolCall.function.name === 'search_terms') {
-              const response = await fetch(`${mcpServerUrl}search_terms`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  query: toolCall.function.arguments.query,
-                  filter_types: toolCall.function.arguments.filter_types
+            if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
+              const mcpResponse = await response.json()
+              
+              if (mcpResponse.error) {
+                log('MCP server returned error', { 
+                  tool: toolCall.function.name,
+                  error: mcpResponse.error 
                 })
+                throw new Error(`MCP tool error: ${mcpResponse.error.message || JSON.stringify(mcpResponse.error)}`)
+              }
+              
+              // MCP returns results - pass to conversation as JSON
+              toolResult = mcpResponse.result
+              
+              log('MCP tool call successful', { 
+                tool: toolCall.function.name,
+                hasContent: !!toolResult?.content,
+                contentLength: toolResult?.content?.length || 0
               })
-              toolResult = await response.json()
-            } else if (toolCall.function.name === 'run_query') {
-              const response = await fetch(`${mcpServerUrl}run_query`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  id: toolCall.function.arguments.id,
-                  query_type: toolCall.function.arguments.query_type
-                })
+            } else {
+              const errorText = await response.text()
+              log('MCP server error response', { 
+                tool: toolCall.function.name,
+                status: response.status, 
+                contentType: response.headers.get('content-type'),
+                errorPreview: errorText.substring(0, 500)
               })
-              toolResult = await response.json()
+              throw new Error(`MCP server error (${response.status}): ${errorText.substring(0, 200)}`)
             }
 
             const toolDuration = Date.now() - toolStart
