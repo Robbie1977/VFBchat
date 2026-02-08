@@ -70,6 +70,8 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
         throw new Error(`HTTP ${response.status}`)
       }
 
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
       let buffer = ''
       let currentEvent = ''
       
