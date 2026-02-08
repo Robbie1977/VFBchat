@@ -68,13 +68,19 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
     })
   }
 
+  const getDisplayName = (role) => {
+    if (role === 'user') return 'Researcher'
+    if (role === 'assistant') return 'VFB'
+    return role
+  }
+
   return (
     <div>
       <h1>VFB Chat Client</h1>
       <div style={{ border: '1px solid #ccc', height: '400px', overflowY: 'scroll', padding: 10 }}>
         {messages.map((msg, idx) => (
           <div key={idx} style={{ marginBottom: 10 }}>
-            <strong>{msg.role}:</strong> <span dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }} />
+            <strong>{getDisplayName(msg.role)}:</strong> <span dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }} />
             {msg.images && msg.images.map((img, i) => (
               <div key={i} className="thumbnail-container" style={{ display: 'inline-block', margin: '5px', position: 'relative' }}>
                 <img 
