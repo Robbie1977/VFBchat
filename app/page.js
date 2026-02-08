@@ -56,7 +56,7 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
   const formatMessage = (content) => {
     // Replace VFB thumbnail URLs with interactive thumbnails
     const thumbnailRegex = /https:\/\/www\.virtualflybrain\.org\/data\/VFB\/i\/[^/]+\/[^/]+\/thumbnail(?:T)?\.png/g
-    return content.replace(thumbnailRegex, (match) => {
+    let formatted = content.replace(thumbnailRegex, (match) => {
       const isTransparent = match.includes('thumbnailT.png')
       const baseUrl = match.replace('/thumbnail.png', '').replace('/thumbnailT.png', '')
       return `<div class="inline-thumbnail-container" style="display: inline-block; margin: 2px; position: relative;">
@@ -66,6 +66,8 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
         </div>
       </div>`
     })
+    // Convert newlines to HTML line breaks
+    return formatted.replace(/\n/g, '<br>')
   }
 
   const getDisplayName = (role) => {
