@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'VFB Chat Client',
+  title: 'Virtual Fly Brain',
   description: 'Guardrailed chat for Virtual Fly Brain neuroanatomy queries',
 }
 

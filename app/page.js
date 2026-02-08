@@ -149,30 +149,30 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
   }
 
   return (
-    <div>
-      <h1>VFB Chat Client</h1>
-      <div style={{ border: '1px solid #ccc', height: '400px', overflowY: 'scroll', padding: 10 }}>
+    <div style={{ backgroundColor: '#000', color: '#fff', minHeight: '100vh', padding: '20px' }}>
+      <h1 style={{ color: '#fff', marginBottom: '20px' }}>Virtual Fly Brain</h1>
+      <div style={{ border: '1px solid #333', height: '400px', overflowY: 'scroll', padding: 10, backgroundColor: '#111', borderRadius: '4px' }}>
         {messages.map((msg, idx) => (
           <div key={idx} style={{ marginBottom: 10 }}>
-            <strong>{getDisplayName(msg.role)}:</strong> <span dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }} />
+            <strong style={{ color: '#4a9eff' }}>{getDisplayName(msg.role)}:</strong> <span dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }} />
             {msg.images && msg.images.map((img, i) => (
               <div key={i} className="thumbnail-container" style={{ display: 'inline-block', margin: '5px', position: 'relative' }}>
                 <img 
                   src={img.thumbnail} 
                   alt={img.label} 
                   className="vfb-thumbnail"
-                  style={{ width: '80px', height: '80px', objectFit: 'cover', border: '1px solid #ddd', cursor: 'pointer' }}
+                  style={{ width: '80px', height: '80px', objectFit: 'cover', border: '1px solid #555', cursor: 'pointer' }}
                   title={img.label}
                 />
                 <div className="thumbnail-hover" style={{
                   position: 'absolute',
                   top: '100%',
                   left: '0',
-                  background: 'white',
-                  border: '1px solid #ccc',
+                  background: '#222',
+                  border: '1px solid #555',
                   borderRadius: '4px',
                   padding: '5px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
                   zIndex: 1000,
                   display: 'none',
                   maxWidth: '300px'
@@ -182,28 +182,58 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
                     alt={img.label} 
                     style={{ maxWidth: '100%', maxHeight: '200px' }}
                   />
-                  <div style={{ fontSize: '12px', marginTop: '5px', color: '#666' }}>{img.label}</div>
+                  <div style={{ fontSize: '12px', marginTop: '5px', color: '#ccc' }}>{img.label}</div>
                 </div>
               </div>
             ))}
           </div>
         ))}
         {isThinking && (
-          <div style={{ marginBottom: 10, fontSize: '0.9em', fontStyle: 'italic', color: '#666' }}>
+          <div style={{ marginBottom: 10, fontSize: '0.9em', fontStyle: 'italic', color: '#888' }}>
             {thinkingMessage}{thinkingDots}
           </div>
         )}
       </div>
-      <input
-        value={input}
-        onChange={e => setInput(e.target.value)}
-        onKeyPress={e => e.key === 'Enter' && handleSend()}
-        style={{ width: '80%' }}
-      />
-      <button onClick={handleSend}>Send</button>
+      <div style={{ marginTop: '10px' }}>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyPress={e => e.key === 'Enter' && handleSend()}
+          style={{ 
+            width: '80%', 
+            padding: '8px', 
+            backgroundColor: '#222', 
+            color: '#fff', 
+            border: '1px solid #555', 
+            borderRadius: '4px',
+            fontSize: '14px'
+          }}
+        />
+        <button 
+          onClick={handleSend}
+          style={{
+            padding: '8px 16px',
+            marginLeft: '10px',
+            backgroundColor: '#4a9eff',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          Send
+        </button>
+      </div>
       {scene.id && (
-        <div>
-          <a href={createVFBUrl(scene)} target="_blank">Open in VFB 3D Browser</a>
+        <div style={{ marginTop: '10px' }}>
+          <a 
+            href={createVFBUrl(scene)} 
+            target="_blank"
+            style={{ color: '#4a9eff', textDecoration: 'none' }}
+          >
+            Open in VFB 3D Browser
+          </a>
         </div>
       )}
       <style jsx>{`
