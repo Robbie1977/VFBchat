@@ -1,14 +1,15 @@
 # VFB Chat Client
 
-A web-based chat client for querying Virtual Fly Brain (VFB) neuroanatomy data using a guardrailed Microsoft Phi-3 mini LLM connected to the VFB MCP server.
+A web-based chat client for exploring Virtual Fly Brain (VFB) data and Drosophila neuroscience using a guardrailed Microsoft Phi-3 mini LLM connected to the VFB MCP server.
 
 ## Features
 
 - URL parameter support for initial queries and existing scene context (`?query=...&i=...&id=...`)
-- Chat interface to refine queries
-- Display image thumbnails from VFB
-- Generate URLs for VFB 3D browser scenes
-- Guardrailed responses limited to VFB neuroanatomy data
+- Chat interface to explore Drosophila neuroanatomy, neural circuits, and research
+- Access to VFB datasets, connectome data, and morphological analysis
+- Display image thumbnails and construct 3D visualization scenes
+- Generate URLs for VFB 3D browser with proper scene management
+- Guardrailed responses covering VFB-related topics including papers, techniques, and methodologies
 
 ## Setup
 
@@ -56,7 +57,7 @@ The project includes a GitHub Actions workflow (`.github/workflows/docker.yml`) 
 ## LLM Configuration
 
 - **Model**: Microsoft Phi-3 mini (3.8B parameters)
-- **Guardrailing**: Implemented via system prompt restricting responses to VFB data and using MCP tools.
+- **Guardrailing**: Implemented via system prompt allowing responses about Drosophila neuroscience, VFB data/tools, research papers, and methodologies while using MCP tools for accurate information.
 - **MCP Integration**: The LLM should be configured to call VFB MCP tools (`get_term_info`, `search_terms`, `run_query`).
 - **Resource Requirements**: Runs on CPU-only, minimal RAM (~4-8GB), no GPU needed.
 - **Changing Models**: If switching to another model (e.g., Llama 3.2 1B), update the Ollama pull command and ensure compatibility with tool calling and MCP. Update the model name in `app/api/chat/route.js`.

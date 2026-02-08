@@ -53,9 +53,25 @@ User query: ${message}`
   const ollamaData = await ollamaResponse.json()
   const response = ollamaData.response
 
-  // Parse for images and new scene (simplified)
-  const images = [] // regex or something to extract
-  const newScene = scene // update if needed
+  // Parse for images from the response text
+  const thumbnailRegex = /https:\/\/www\.virtualflybrain\.org\/data\/VFB\/i\/([^/]+)\/([^/]+)\/thumbnail(?:T)?\.png/g
+  const images = []
+  let match
+  while ((match = thumbnailRegex.exec(response)) !== null) {
+    const templateId = match[1]
+    const imageId = match[2]
+    images.push({
+      id: imageId,
+      template: templateId,
+      thumbnail: match[0],
+      label: `VFB Image ${imageId}`
+    })
+  }
+
+  // Also check for any structured image data that might come from MCP tools
+  // This is a placeholder for when MCP integration provides structured image data
+
+  const newScene = scene // update if needed based on response content
 
   return NextResponse.json({ response, images, newScene })
 }
