@@ -197,6 +197,15 @@ Common query patterns:
             hasToolResults
           })
           
+          // DEBUG: Log messages being sent to Ollama
+          console.log('🔍 MESSAGES TO OLLAMA:')
+          messages.forEach((msg, i) => {
+            console.log(`🔍 Message ${i} (${msg.role}):`, msg.content ? msg.content.substring(0, 200) + (msg.content.length > 200 ? '...' : '') : 'no content')
+            if (msg.role === 'tool') {
+              console.log(`🔍 Tool result size: ${msg.content.length} chars`)
+            }
+          })
+          
           const ollamaResponse = await fetch(`${ollamaUrl}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -233,6 +242,14 @@ Common query patterns:
 
           const ollamaData = await ollamaResponse.json()
           const assistantMessage = ollamaData.message
+
+          // DEBUG: Log Ollama response
+          console.log('🔍 OLLAMA RESPONSE:', {
+            hasContent: !!assistantMessage?.content,
+            contentLength: assistantMessage?.content?.length || 0,
+            toolCallsCount: assistantMessage?.tool_calls?.length || 0,
+            contentPreview: assistantMessage?.content?.substring(0, 200) + (assistantMessage?.content?.length > 200 ? '...' : '') || 'no content'
+          })
 
           if (!assistantMessage) {
             log('No assistant message in Ollama response')
@@ -282,8 +299,17 @@ Common query patterns:
                     resultSize: JSON.stringify(toolResult).length 
                   })
 
+                  // DEBUG: Log raw MCP result
+                  console.log('🔍 MCP RAW RESULT:', JSON.stringify(toolResult, null, 2))
+
                   // Process search results to minimize response size
                   if (toolCall.function.name === 'search_terms' && toolResult?.response?.docs) {
+                    // DEBUG: Log original docs before minimization
+                    console.log('🔍 ORIGINAL SEARCH DOCS:', toolResult.response.docs.length, 'items')
+                    toolResult.response.docs.slice(0, 3).forEach((doc, i) => {
+                      console.log(`🔍 Doc ${i}:`, { short_form: doc.short_form, label: doc.label, facetsSize: JSON.stringify(doc.facets_annotation).length })
+                    })
+
                     // Limit to top 10 results and keep only essential fields
                     const minimizedDocs = toolResult.response.docs.slice(0, 10).map(doc => ({
                       short_form: doc.short_form,
@@ -302,12 +328,19 @@ Common query patterns:
                       minimizedCount: minimizedDocs.length,
                       resultSize: JSON.stringify(toolResult).length
                     })
+
+                    // DEBUG: Log minimized result
+                    console.log('🔍 MINIMIZED RESULT:', JSON.stringify(toolResult, null, 2))
                   }
+
+                  // DEBUG: Log what content will be sent to LLM
+                  const toolContent = JSON.stringify(toolResult)
+                  console.log('🔍 TOOL CONTENT TO LLM:', toolContent.substring(0, 500) + (toolContent.length > 500 ? '...' : ''))
 
                   // Add tool result to conversation
                   messages.push({
                     role: 'tool',
-                    content: JSON.stringify(toolResult),
+                    content: toolContent,
                     tool_call_id: toolCall.id
                   })
 
