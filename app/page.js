@@ -41,16 +41,21 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
     setMessages(prev => [...prev, userMessage])
     setInput('')
 
-    // Call API
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: input, scene })
-    })
-    const data = await response.json()
-    const botMessage = { role: 'assistant', content: data.response, images: data.images }
-    setMessages(prev => [...prev, botMessage])
-    if (data.newScene) setScene(data.newScene)
+    try {
+      // Call API
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: input, scene })
+      })
+      const data = await response.json()
+      const botMessage = { role: 'assistant', content: data.response, images: data.images }
+      setMessages(prev => [...prev, botMessage])
+      if (data.newScene) setScene(data.newScene)
+    } catch (error) {
+      const errorMessage = { role: 'assistant', content: 'Sorry, there was an error processing your request. Please try again.' }
+      setMessages(prev => [...prev, errorMessage])
+    }
   }
 
   const formatMessage = (content) => {

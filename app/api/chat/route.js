@@ -41,15 +41,37 @@ User query: ${message}`
 
   // Call Ollama
   const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
-  const ollamaResponse = await fetch(`${ollamaUrl}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'microsoft/phi3:3.8b',
-      prompt: systemPrompt,
-      stream: false
+  let ollamaResponse
+  try {
+    ollamaResponse = await fetch(`${ollamaUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'microsoft/phi3:3.8b',
+        prompt: systemPrompt,
+        stream: false
+      })
     })
-  })
+  } catch (error) {
+    return NextResponse.json({ 
+      response: "Error: Unable to connect to Ollama. Please ensure Ollama is running and the Phi-3 model is installed.", 
+      images: [], 
+      newScene: scene 
+    }, { status: 500 })
+  }
+
+  if (!ollamaResponse.ok) {
+    const errorText = await ollamaResponse.text()
+    let errorMessage = "Error: Ollama returned an error."
+    if (ollamaResponse.status === 404) {
+      errorMessage = "Error: Model not found. Please ensure the Phi-3 model is pulled: `ollama pull microsoft/phi3:3.8b`"
+    }
+    return NextResponse.json({ 
+      response: errorMessage, 
+      images: [], 
+      newScene: scene 
+    }, { status: ollamaResponse.status })
+  }
 
   const ollamaData = await ollamaResponse.json()
   const response = ollamaData.response
