@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { randomUUID } from 'node:crypto'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 
 function log(message, data = {}) {
   const timestamp = new Date().toISOString()
@@ -25,8 +26,25 @@ export async function POST(request) {
       }
 
       try {
-        // Send initial status
-        sendEvent('status', { message: 'Thinking', phase: 'llm' })
+        // Initialize MCP client and transport
+        let mcpTransport
+        let mcpClient
+
+        try {
+          log('Initializing MCP client...')
+          mcpTransport = new StreamableHTTPClientTransport(new URL('https://vfb3-mcp.virtualflybrain.org/'))
+          mcpClient = new Client(
+            { name: 'vfb-chat-client', version: '1.0.0' },
+            { capabilities: {} }
+          )
+
+          log('Connecting to MCP server...')
+          await mcpClient.connect(mcpTransport)
+          log('MCP client connected successfully')
+        } catch (connectError) {
+          log('MCP client connection failed', { error: connectError.message })
+          // Continue without MCP - the LLM will handle it gracefully
+        }
         const tools = [
           {
             type: 'function',
@@ -204,75 +222,15 @@ Response strategy:
                 try {
                   let toolResult = null
 
-                  // Call MCP tool using proper session-based protocol
-                  const mcpServerUrl = 'https://vfb3-mcp.virtualflybrain.org/'
-
-                  // Initialize MCP session
-                  const sessionId = randomUUID()
-                  const initResponse = await fetch(mcpServerUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'mcp-session-id': sessionId },
-                    body: JSON.stringify({
-                      jsonrpc: '2.0',
-                      id: Date.now(),
-                      method: 'initialize',
-                      params: {
-                        protocolVersion: '2024-11-05',
-                        capabilities: {},
-                        clientInfo: {
-                          name: 'vfb-chat-client',
-                          version: '1.0.0'
-                        }
-                      }
+                  // Use MCP client to call the tool
+                  if (mcpClient.getServerCapabilities()?.tools) {
+                    const result = await mcpClient.callTool({
+                      name: toolCall.function.name,
+                      arguments: toolCall.function.arguments
                     })
-                  })
-
-                  if (!initResponse.ok) {
-                    const errorText = await initResponse.text()
-                    log('MCP initialize failed', { status: initResponse.status, error: errorText })
-                    throw new Error(`MCP initialize failed (${initResponse.status}): ${errorText}`)
-                  }
-
-                  const initData = await initResponse.json()
-                  if (initData.error) {
-                    log('MCP initialize error', { error: initData.error })
-                    throw new Error(`MCP initialize error: ${initData.error.message}`)
-                  }
-
-                  // Get actual session ID from response headers if set
-                  const actualSessionId = initResponse.headers.get('mcp-session-id') || sessionId
-
-                  // Now call the tool
-                  const toolResponse = await fetch(mcpServerUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'mcp-session-id': actualSessionId },
-                    body: JSON.stringify({
-                      jsonrpc: '2.0',
-                      id: Date.now(),
-                      method: 'tools/call',
-                      params: {
-                        name: toolCall.function.name,
-                        arguments: toolCall.function.arguments
-                      }
-                    })
-                  })
-
-                  if (toolResponse.ok && toolResponse.headers.get('content-type')?.includes('application/json')) {
-                    const rpcResponse = await toolResponse.json()
-                    if (rpcResponse.result) {
-                      toolResult = rpcResponse.result
-                    } else if (rpcResponse.error) {
-                      throw new Error(`MCP server error: ${rpcResponse.error.message}`)
-                    }
+                    toolResult = result
                   } else {
-                    const errorText = await toolResponse.text()
-                    log('MCP server error response', { 
-                      tool: toolCall.function.name, 
-                      status: toolResponse.status, 
-                      contentType: toolResponse.headers.get('content-type'),
-                      errorPreview: errorText.substring(0, 500)
-                    })
-                    throw new Error(`MCP server error (${toolResponse.status}): ${errorText.substring(0, 200)}`)
+                    throw new Error('MCP server does not support tools')
                   }
 
                   const toolDuration = Date.now() - toolStart
@@ -370,6 +328,15 @@ Response strategy:
 
         // Send final result
         sendEvent('result', { response: finalResponse, images, newScene: scene })
+        
+        // Clean up MCP client
+        try {
+          if (mcpClient) await mcpClient.close()
+          if (mcpTransport) await mcpTransport.close()
+        } catch (cleanupError) {
+          log('MCP cleanup error', { error: cleanupError.message })
+        }
+        
         controller.close()
 
       } catch (error) {
@@ -378,6 +345,15 @@ Response strategy:
         
         console.error('Chat API error:', error)
         sendEvent('error', { message: `Error: ${error.message}` })
+        
+        // Clean up MCP client
+        try {
+          if (mcpClient) await mcpClient.close()
+          if (mcpTransport) await mcpTransport.close()
+        } catch (cleanupError) {
+          log('MCP cleanup error', { error: cleanupError.message })
+        }
+        
         controller.close()
       }
     }
