@@ -28,7 +28,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: robbie1977/vfbchat
+        images: virtualflybrain/vfbchat
         tags: |
           type=ref,event=branch
           type=ref,event=pr
