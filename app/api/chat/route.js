@@ -67,7 +67,7 @@ export async function POST(request) {
             type: 'function',
             function: {
               name: 'search_terms',
-              description: 'Search for VFB terms by keywords, with filtering by entity type, nervous system component, neurotransmitter, or dataset',
+              description: 'Search for VFB terms by keywords, with optional filtering by entity type. Use specific filter_types to narrow results and avoid overwhelming responses.',
               parameters: {
                 type: 'object',
                 properties: {
@@ -78,7 +78,17 @@ export async function POST(request) {
                   filter_types: {
                     type: 'array',
                     items: { type: 'string' },
-                    description: 'Optional filter by entity types (e.g., neuron, muscle, gene)'
+                    description: 'Optional filter by entity types (e.g., ["neuron"], ["gene"], ["anatomy"], ["adult"], ["has_image"]) - use specific filters to limit results'
+                  },
+                  exclude_types: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Optional exclude types (e.g., ["deprecated"]) to remove unwanted results'
+                  },
+                  boost_types: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Optional boost types to prioritize results (e.g., ["has_image", "has_neuron_connectivity"])'
                   }
                 },
                 required: ['query']
@@ -120,35 +130,42 @@ export async function POST(request) {
 
 Use VFB MCP tools strategically following this approach:
 
-1. START WITH SEARCH: When users ask about specific anatomy terms, neurons, or brain regions, use search_terms first to find relevant VFB entities. Use filter_types to narrow by entity type (e.g., ["neuron"], ["gene"], ["anatomy"]) and boost_types for prioritization (e.g., ["has_image", "has_neuron_connectivity"]).
+1. START WITH SEARCH: When users ask about specific anatomy terms, neurons, or brain regions, use search_terms first to find relevant VFB entities. Use specific filter_types to narrow results significantly (e.g., ["neuron", "adult", "has_image"] for adult neurons with images, ["anatomy"] for brain regions, ["gene"] for genes). Always use exclude_types: ["deprecated"] to remove obsolete results. Use boost_types like ["has_image", "has_neuron_connectivity"] to prioritize useful entities.
 
-2. GET DETAILED INFO: Use get_term_info on promising IDs to get comprehensive metadata including SuperTypes, Tags, Images, and available Queries.
+2. GET DETAILED INFO: Use get_term_info on the most promising 1-3 IDs from search results to get comprehensive metadata including SuperTypes, Tags, Images, and available Queries.
 
-3. EXPLORE RELATED DATA: Use run_query with different query_types based on Tags (PaintedDomains, SimilarMorphology, Connectivity).
+3. EXPLORE RELATED DATA: Use run_query with different query_types based on Tags (PaintedDomains, SimilarMorphology, Connectivity) for entities that support these analyses.
 
 4. CONSTRUCT VISUALIZATIONS: When showing results, construct VFB browser URLs for 3D scenes using the format: https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=<focus_id>&i=<template_id>,<image_ids>
 
 Key guidelines:
 - Always put template ID first in i= parameter to ensure correct 3D coordinate space
 - Only combine images registered to the same template
-- Use filter_types like ["neuron", "adult", "has_image"] for specific queries
+- Use specific filter_types like ["neuron", "adult", "has_image"] for adult neurons with images, ["anatomy"] for brain regions, ["gene"] for genes
+- Always exclude deprecated results with exclude_types: ["deprecated"]
 - Check Tags to see what analyses are available for each entity
 - If tool calls fail, provide answers based on your training knowledge and mention the technical issue
 
-VFB MCP server: https://vfb3-mcp.virtualflybrain.org/ (JSON-RPC 2.0 API)
+VFB MCP server: https://vfb3-mcp.virtualflybrain.org/ (Streamable HTTP API)
 
 Available tools:
 - get_term_info(id): Get detailed metadata about VFB entities including images, relationships, and available analyses
-- search_terms(query, filter_types, boost_types): Search for VFB terms with optional filtering and boosting
+- search_terms(query, filter_types, exclude_types, boost_types): Search for VFB terms with optional filtering, exclusion, and boosting to find relevant entities efficiently
 - run_query(id, query_type): Execute pre-computed analyses like expression domains or connectivity maps
 
 Response strategy:
 1. Identify the scientific question and map to VFB capabilities
-2. Search for relevant terms using appropriate filters
-3. Get detailed information for promising results
+2. Search for relevant terms using specific filtering to limit results
+3. Get detailed information for the most promising 1-3 results
 4. Run relevant queries based on available Tags
 5. Explain findings with scientific interpretation
-6. Suggest 3D visualizations when relevant data is available`
+6. Suggest 3D visualizations when relevant data is available
+
+Common query patterns:
+- Gene expression: Search with filter_types: ["gene"] → get_term_info → run PaintedDomains query
+- Neuron morphology: Search with filter_types: ["neuron", "adult", "has_image"] → get_term_info → check for SimilarMorphology
+- Brain regions: Search with filter_types: ["anatomy"] → explore relationships
+- Connectivity: Search with filter_types: ["has_neuron_connectivity"] → run Connectivity queries`
 
         // Initial messages
         const messages = [
@@ -239,6 +256,24 @@ Response strategy:
                     duration: `${toolDuration}ms`,
                     resultSize: JSON.stringify(toolResult).length 
                   })
+
+                  // Process search results to minimize response size
+                  if (toolCall.function.name === 'search_terms' && toolResult?.response?.docs) {
+                    const minimizedDocs = toolResult.response.docs.map(doc => ({
+                      short_form: doc.short_form,
+                      label: doc.label,
+                      synonym: doc.synonym,
+                      facets_annotation: doc.facets_annotation
+                    }))
+                    toolResult = {
+                      ...toolResult,
+                      response: {
+                        ...toolResult.response,
+                        docs: minimizedDocs
+                      }
+                    }
+                    log('Minimized search results', { originalCount: toolResult.response.docs.length })
+                  }
 
                   // Add tool result to conversation
                   messages.push({
