@@ -205,7 +205,6 @@ Current scene context: id=${scene.id}, i=${scene.i}`
               log('MCP server unavailable, skipping tool calls')
               // Remove tool calls from assistant message so it provides a direct response
               assistantMessage.tool_calls = []
-              assistantMessage.content = assistantMessage.content || 'I apologize, but the VFB data service is currently unavailable. I\'ll provide information based on my training knowledge.'
             } else {
               log('MCP server available, processing tool calls', { count: assistantMessage.tool_calls.length })
               
@@ -213,144 +212,147 @@ Current scene context: id=${scene.id}, i=${scene.i}`
               sendEvent('status', { message: 'Querying the fly hive mind', phase: 'mcp' })
               
               for (const toolCall of assistantMessage.tool_calls) {
-              const toolStart = Date.now()
-              log('Executing tool call', { 
-                name: toolCall.function.name, 
-                args: JSON.stringify(toolCall.function.arguments).substring(0, 200) 
-              })
-              
-              try {
-                let toolResult = null
-
-                // Call appropriate MCP endpoint using JSON-RPC
-                const mcpServerUrl = 'https://vfb3-mcp.virtualflybrain.org/'
-
-                if (toolCall.function.name === 'get_term_info') {
-                  const response = await fetch(mcpServerUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      jsonrpc: '2.0',
-                      method: 'get_term_info',
-                      params: { id: toolCall.function.arguments.id },
-                      id: Date.now()
-                    })
-                  })
-                  if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
-                    const rpcResponse = await response.json()
-                    if (rpcResponse.result) {
-                      toolResult = rpcResponse.result
-                    } else if (rpcResponse.error) {
-                      throw new Error(`MCP server error: ${rpcResponse.error.message}`)
-                    }
-                  } else {
-                    const errorText = await response.text()
-                    log('MCP server error response', { 
-                      tool: 'get_term_info', 
-                      status: response.status, 
-                      contentType: response.headers.get('content-type'),
-                      errorPreview: errorText.substring(0, 500)
-                    })
-                    throw new Error(`MCP server error (${response.status}): ${errorText.substring(0, 200)}`)
-                  }
-                } else if (toolCall.function.name === 'search_terms') {
-                  const response = await fetch(mcpServerUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      jsonrpc: '2.0',
-                      method: 'search_terms',
-                      params: {
-                        query: toolCall.function.arguments.query,
-                        filter_types: toolCall.function.arguments.filter_types
-                      },
-                      id: Date.now()
-                    })
-                  })
-                  if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
-                    const rpcResponse = await response.json()
-                    if (rpcResponse.result) {
-                      toolResult = rpcResponse.result
-                    } else if (rpcResponse.error) {
-                      throw new Error(`MCP server error: ${rpcResponse.error.message}`)
-                    }
-                  } else {
-                    const errorText = await response.text()
-                    log('MCP server error response', { 
-                      tool: 'search_terms', 
-                      status: response.status, 
-                      contentType: response.headers.get('content-type'),
-                      errorPreview: errorText.substring(0, 500)
-                    })
-                    throw new Error(`MCP server error (${response.status}): ${errorText.substring(0, 200)}`)
-                  }
-                } else if (toolCall.function.name === 'run_query') {
-                  const response = await fetch(mcpServerUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      jsonrpc: '2.0',
-                      method: 'run_query',
-                      params: {
-                        id: toolCall.function.arguments.id,
-                        query_type: toolCall.function.arguments.query_type
-                      },
-                      id: Date.now()
-                    })
-                  })
-                  if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
-                    const rpcResponse = await response.json()
-                    if (rpcResponse.result) {
-                      toolResult = rpcResponse.result
-                    } else if (rpcResponse.error) {
-                      throw new Error(`MCP server error: ${rpcResponse.error.message}`)
-                    }
-                  } else {
-                    const errorText = await response.text()
-                    log('MCP server error response', { 
-                      tool: 'run_query', 
-                      status: response.status, 
-                      contentType: response.headers.get('content-type'),
-                      errorPreview: errorText.substring(0, 500)
-                    })
-                    throw new Error(`MCP server error (${response.status}): ${errorText.substring(0, 200)}`)
-                  }
-                }
-
-                const toolDuration = Date.now() - toolStart
-                log('Tool call completed', { 
+                const toolStart = Date.now()
+                log('Executing tool call', { 
                   name: toolCall.function.name, 
-                  duration: `${toolDuration}ms`,
-                  resultSize: JSON.stringify(toolResult).length 
-                })
-
-                // Add tool result to conversation
-                messages.push({
-                  role: 'tool',
-                  content: JSON.stringify(toolResult),
-                  tool_call_id: toolCall.id
-                })
-
-              } catch (toolError) {
-                const toolDuration = Date.now() - toolStart
-                log('Tool call failed', { 
-                  name: toolCall.function.name, 
-                  duration: `${toolDuration}ms`,
-                  error: toolError.message 
+                  args: JSON.stringify(toolCall.function.arguments).substring(0, 200) 
                 })
                 
-                messages.push({
-                  role: 'tool',
-                  content: `Error executing ${toolCall.function.name}: ${toolError.message}`,
-                  tool_call_id: toolCall.id
-                })
+                try {
+                  let toolResult = null
+
+                  // Call appropriate MCP endpoint using JSON-RPC
+                  const mcpServerUrl = 'https://vfb3-mcp.virtualflybrain.org/'
+
+                  if (toolCall.function.name === 'get_term_info') {
+                    const response = await fetch(mcpServerUrl, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        method: 'get_term_info',
+                        params: { id: toolCall.function.arguments.id },
+                        id: Date.now()
+                      })
+                    })
+                    if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
+                      const rpcResponse = await response.json()
+                      if (rpcResponse.result) {
+                        toolResult = rpcResponse.result
+                      } else if (rpcResponse.error) {
+                        throw new Error(`MCP server error: ${rpcResponse.error.message}`)
+                      }
+                    } else {
+                      const errorText = await response.text()
+                      log('MCP server error response', { 
+                        tool: 'get_term_info', 
+                        status: response.status, 
+                        contentType: response.headers.get('content-type'),
+                        errorPreview: errorText.substring(0, 500)
+                      })
+                      throw new Error(`MCP server error (${response.status}): ${errorText.substring(0, 200)}`)
+                    }
+                  } else if (toolCall.function.name === 'search_terms') {
+                    const response = await fetch(mcpServerUrl, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        method: 'search_terms',
+                        params: {
+                          query: toolCall.function.arguments.query,
+                          filter_types: toolCall.function.arguments.filter_types
+                        },
+                        id: Date.now()
+                      })
+                    })
+                    if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
+                      const rpcResponse = await response.json()
+                      if (rpcResponse.result) {
+                        toolResult = rpcResponse.result
+                      } else if (rpcResponse.error) {
+                        throw new Error(`MCP server error: ${rpcResponse.error.message}`)
+                      }
+                    } else {
+                      const errorText = await response.text()
+                      log('MCP server error response', { 
+                        tool: 'search_terms', 
+                        status: response.status, 
+                        contentType: response.headers.get('content-type'),
+                        errorPreview: errorText.substring(0, 500)
+                      })
+                      throw new Error(`MCP server error (${response.status}): ${errorText.substring(0, 200)}`)
+                    }
+                  } else if (toolCall.function.name === 'run_query') {
+                    const response = await fetch(mcpServerUrl, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        method: 'run_query',
+                        params: {
+                          id: toolCall.function.arguments.id,
+                          query_type: toolCall.function.arguments.query_type
+                        },
+                        id: Date.now()
+                      })
+                    })
+                    if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
+                      const rpcResponse = await response.json()
+                      if (rpcResponse.result) {
+                        toolResult = rpcResponse.result
+                      } else if (rpcResponse.error) {
+                        throw new Error(`MCP server error: ${rpcResponse.error.message}`)
+                      }
+                    } else {
+                      const errorText = await response.text()
+                      log('MCP server error response', { 
+                        tool: 'run_query', 
+                        status: response.status, 
+                        contentType: response.headers.get('content-type'),
+                        errorPreview: errorText.substring(0, 500)
+                      })
+                      throw new Error(`MCP server error (${response.status}): ${errorText.substring(0, 200)}`)
+                    }
+                  }
+
+                  const toolDuration = Date.now() - toolStart
+                  log('Tool call completed', { 
+                    name: toolCall.function.name, 
+                    duration: `${toolDuration}ms`,
+                    resultSize: JSON.stringify(toolResult).length 
+                  })
+
+                  // Add tool result to conversation
+                  messages.push({
+                    role: 'tool',
+                    content: JSON.stringify(toolResult),
+                    tool_call_id: toolCall.id
+                  })
+
+                } catch (toolError) {
+                  const toolDuration = Date.now() - toolStart
+                  log('Tool call failed', { 
+                    name: toolCall.function.name, 
+                    duration: `${toolDuration}ms`,
+                    error: toolError.message 
+                  })
+                  
+                  messages.push({
+                    role: 'tool',
+                    content: `Error executing ${toolCall.function.name}: ${toolError.message}`,
+                    tool_call_id: toolCall.id
+                  })
+                }
               }
+              
+              // Switch back to thinking for next LLM call
+              sendEvent('status', { message: 'Thinking', phase: 'llm' })
             }
-            
-            // Switch back to thinking for next LLM call
-            sendEvent('status', { message: 'Thinking', phase: 'llm' })
-            
-          } else {
+          }
+
+          // Check if we have tool calls after processing (or if they were cleared)
+          if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
             // Final response
             finalResponse = assistantMessage.content || ''
             log('Final response generated', { length: finalResponse.length })
