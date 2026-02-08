@@ -47,7 +47,7 @@ User query: ${message}`
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'microsoft/phi3:3.8b',
+        model: 'phi3:3.8b',
         prompt: systemPrompt,
         stream: false
       })
@@ -64,7 +64,7 @@ User query: ${message}`
     const errorText = await ollamaResponse.text()
     let errorMessage = "Error: Ollama returned an error."
     if (ollamaResponse.status === 404) {
-      errorMessage = "Error: Model not found. Please ensure the Phi-3 model is pulled: `ollama pull microsoft/phi3:3.8b`"
+      errorMessage = "Error: Model not found. Please ensure the Phi-3 model is pulled: `ollama pull phi3:3.8b`"
     }
     return NextResponse.json({ 
       response: errorMessage, 

@@ -17,14 +17,9 @@ A web-based chat client for exploring Virtual Fly Brain (VFB) data and Drosophil
 
 2. Clone this repository.
 
-3. Run `docker-compose up --build` to start the services.
+3. Run `docker-compose up --build` to start the services. The Phi-3 model will be automatically pulled on first startup.
 
-4. In a separate terminal, pull the Phi-3 model:
-   ```
-   docker exec -it vfbchat-ollama-1 ollama pull microsoft/phi3:3.8b
-   ```
-
-5. Configure the LLM to use the VFB MCP server at `https://vfb3-mcp.virtualflybrain.org/`. This may require custom setup depending on the LLM client used with Ollama. Ensure tool calling is enabled for Phi-3 to access MCP tools.
+4. Configure the LLM to use the VFB MCP server at `https://vfb3-mcp.virtualflybrain.org/`. This may require custom setup depending on the LLM client used with Ollama. Ensure tool calling is enabled for Phi-3 to access MCP tools.
 
 ## Deployment
 
@@ -34,7 +29,7 @@ Follow the Setup steps above.
 For development without Docker:
 1. Install Ollama locally: https://ollama.ai/download
 2. Start Ollama: `ollama serve`
-3. Pull the model: `ollama pull microsoft/phi3:3.8b`
+3. Pull the model: `ollama pull phi3:3.8b`
 4. Run the app: `npm run dev`
 5. The app will connect to Ollama at `http://localhost:11434`
 

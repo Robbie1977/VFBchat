@@ -7,7 +7,8 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-    command: serve
+    entrypoint: /bin/sh
+    command: -c "ollama serve & sleep 10 && ollama pull phi3:3.8b && wait"
 
   app:
     build: .
