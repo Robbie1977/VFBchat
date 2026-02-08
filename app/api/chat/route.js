@@ -186,7 +186,7 @@ Response strategy:
           if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
             log('Processing tool calls', { count: assistantMessage.tool_calls.length })
             
-            // Update status to show we're querying external data
+            // Update status immediately when MCP calls are initiated
             sendEvent('status', { message: 'Querying the fly hive mind', phase: 'mcp' })
             
             for (const toolCall of assistantMessage.tool_calls) {
@@ -316,6 +316,9 @@ Response strategy:
                     error: toolError.message 
                   })
                   
+                  // Update status when MCP call fails
+                  sendEvent('status', { message: 'MCP service unavailable, using knowledge base', phase: 'fallback' })
+                  
                   messages.push({
                     role: 'tool',
                     content: `Error executing ${toolCall.function.name}: ${toolError.message}`,
@@ -324,8 +327,8 @@ Response strategy:
                 }
               }
               
-              // Switch back to thinking for next LLM call
-              sendEvent('status', { message: 'Thinking', phase: 'llm' })
+            // Switch back to thinking for next LLM call after MCP processing
+            sendEvent('status', { message: 'Processing results', phase: 'llm' })
           } else {
             // No tool calls - this is the final response
             finalResponse = assistantMessage.content || ''
@@ -335,6 +338,7 @@ Response strategy:
         }
         if (!finalResponse) {
           log('No final response after max iterations, making fallback call')
+          sendEvent('status', { message: 'Generating final response', phase: 'fallback' })
           const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
           const fallbackStart = Date.now()
           
