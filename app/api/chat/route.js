@@ -102,7 +102,7 @@ Use VFB MCP tools to retrieve accurate, up-to-date information. When a user asks
 
 If tool calls fail or return errors, provide the best possible answer based on your training knowledge, and mention that you were unable to access the latest VFB data due to technical issues.
 
-VFB MCP server: https://vfb3-mcp.virtualflybrain.org/ (custom HTTP REST API)
+VFB MCP server: https://vfb3-mcp.virtualflybrain.org/ (JSON-RPC 2.0 API)
 
 Available tools:
 - get_term_info: Get detailed information about a VFB term by ID, including definitions, relationships, images, and references
@@ -193,17 +193,27 @@ Current scene context: id=${scene.id}, i=${scene.i}`
               try {
                 let toolResult = null
 
-                // Call appropriate MCP endpoint
+                // Call appropriate MCP endpoint using JSON-RPC
                 const mcpServerUrl = 'https://vfb3-mcp.virtualflybrain.org/'
 
                 if (toolCall.function.name === 'get_term_info') {
-                  const response = await fetch(`${mcpServerUrl}get_term_info`, {
+                  const response = await fetch(mcpServerUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: toolCall.function.arguments.id })
+                    body: JSON.stringify({
+                      jsonrpc: '2.0',
+                      method: 'get_term_info',
+                      params: { id: toolCall.function.arguments.id },
+                      id: Date.now()
+                    })
                   })
                   if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
-                    toolResult = await response.json()
+                    const rpcResponse = await response.json()
+                    if (rpcResponse.result) {
+                      toolResult = rpcResponse.result
+                    } else if (rpcResponse.error) {
+                      throw new Error(`MCP server error: ${rpcResponse.error.message}`)
+                    }
                   } else {
                     const errorText = await response.text()
                     log('MCP server error response', { 
@@ -215,16 +225,26 @@ Current scene context: id=${scene.id}, i=${scene.i}`
                     throw new Error(`MCP server error (${response.status}): ${errorText.substring(0, 200)}`)
                   }
                 } else if (toolCall.function.name === 'search_terms') {
-                  const response = await fetch(`${mcpServerUrl}search_terms`, {
+                  const response = await fetch(mcpServerUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      query: toolCall.function.arguments.query,
-                      filter_types: toolCall.function.arguments.filter_types
+                      jsonrpc: '2.0',
+                      method: 'search_terms',
+                      params: {
+                        query: toolCall.function.arguments.query,
+                        filter_types: toolCall.function.arguments.filter_types
+                      },
+                      id: Date.now()
                     })
                   })
                   if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
-                    toolResult = await response.json()
+                    const rpcResponse = await response.json()
+                    if (rpcResponse.result) {
+                      toolResult = rpcResponse.result
+                    } else if (rpcResponse.error) {
+                      throw new Error(`MCP server error: ${rpcResponse.error.message}`)
+                    }
                   } else {
                     const errorText = await response.text()
                     log('MCP server error response', { 
@@ -236,16 +256,26 @@ Current scene context: id=${scene.id}, i=${scene.i}`
                     throw new Error(`MCP server error (${response.status}): ${errorText.substring(0, 200)}`)
                   }
                 } else if (toolCall.function.name === 'run_query') {
-                  const response = await fetch(`${mcpServerUrl}run_query`, {
+                  const response = await fetch(mcpServerUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      id: toolCall.function.arguments.id,
-                      query_type: toolCall.function.arguments.query_type
+                      jsonrpc: '2.0',
+                      method: 'run_query',
+                      params: {
+                        id: toolCall.function.arguments.id,
+                        query_type: toolCall.function.arguments.query_type
+                      },
+                      id: Date.now()
                     })
                   })
                   if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
-                    toolResult = await response.json()
+                    const rpcResponse = await response.json()
+                    if (rpcResponse.result) {
+                      toolResult = rpcResponse.result
+                    } else if (rpcResponse.error) {
+                      throw new Error(`MCP server error: ${rpcResponse.error.message}`)
+                    }
                   } else {
                     const errorText = await response.text()
                     log('MCP server error response', { 
