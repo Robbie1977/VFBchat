@@ -67,7 +67,7 @@ export async function POST(request) {
             type: 'function',
             function: {
               name: 'search_terms',
-              description: 'Search for VFB terms by keywords, with optional filtering by entity type. Use specific filter_types to narrow results and avoid overwhelming responses.',
+              description: 'Search for VFB terms by keywords, with optional filtering by entity type. Results are limited to 10 by default for performance - use pagination to get more.',
               parameters: {
                 type: 'object',
                 properties: {
@@ -89,6 +89,14 @@ export async function POST(request) {
                     type: 'array',
                     items: { type: 'string' },
                     description: 'Optional boost types to prioritize results (e.g., ["has_image", "has_neuron_connectivity"])'
+                  },
+                  start: {
+                    type: 'number',
+                    description: 'Optional pagination start index (default 0) - use to get more results beyond the first 10'
+                  },
+                  rows: {
+                    type: 'number',
+                    description: 'Optional number of results to return (default 10, max 50) - use smaller numbers for focused searches'
                   }
                 },
                 required: ['query']
@@ -132,11 +140,16 @@ Use VFB MCP tools strategically following this approach:
 
 1. START WITH SEARCH: When users ask about specific anatomy terms, neurons, or brain regions, use search_terms first to find relevant VFB entities. Use specific filter_types to narrow results significantly (e.g., ["neuron", "adult", "has_image"] for adult neurons with images, ["anatomy"] for brain regions, ["gene"] for genes). Always use exclude_types: ["deprecated"] to remove obsolete results. Use boost_types like ["has_image", "has_neuron_connectivity"] to prioritize useful entities.
 
-2. GET DETAILED INFO: Use get_term_info on the most promising 1-3 IDs from search results to get comprehensive metadata including SuperTypes, Tags, Images, and available Queries.
+2. HANDLE TRUNCATED RESULTS: Search results are limited to 10 items by default for performance. If you need more results, check the response._truncation metadata:
+   - If _truncation.canRequestMore is true, call search_terms again with start=10, rows=10 to get the next batch
+   - Continue with start=20, start=30, etc. as needed
+   - Use smaller rows values (5-10) for focused searches to avoid overwhelming responses
 
-3. EXPLORE RELATED DATA: Use run_query with different query_types based on Tags (PaintedDomains, SimilarMorphology, Connectivity) for entities that support these analyses.
+3. GET DETAILED INFO: Use get_term_info on the most promising 1-3 IDs from search results to get comprehensive metadata including SuperTypes, Tags, Images, and available Queries.
 
-4. CONSTRUCT VISUALIZATIONS: When showing results, construct VFB browser URLs for 3D scenes using the format: https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=<focus_id>&i=<template_id>,<image_ids>
+4. EXPLORE RELATED DATA: Use run_query with different query_types based on Tags (PaintedDomains, SimilarMorphology, Connectivity) for entities that support these analyses.
+
+5. CONSTRUCT VISUALIZATIONS: When showing results, construct VFB browser URLs for 3D scenes using the format: https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=<focus_id>&i=<template_id>,<image_ids>
 
 Key guidelines:
 - Always put template ID first in i= parameter to ensure correct 3D coordinate space
@@ -150,16 +163,17 @@ VFB MCP server: https://vfb3-mcp.virtualflybrain.org/ (Streamable HTTP API)
 
 Available tools:
 - get_term_info(id): Get detailed metadata about VFB entities including images, relationships, and available analyses
-- search_terms(query, filter_types, exclude_types, boost_types): Search for VFB terms with optional filtering, exclusion, and boosting to find relevant entities efficiently
+- search_terms(query, filter_types, exclude_types, boost_types, start, rows): Search for VFB terms with optional filtering, exclusion, boosting, and pagination. Results limited to 10 by default - use start/rows for pagination.
 - run_query(id, query_type): Execute pre-computed analyses like expression domains or connectivity maps
 
 Response strategy:
 1. Identify the scientific question and map to VFB capabilities
 2. Search for relevant terms using specific filtering to limit results
-3. Get detailed information for the most promising 1-3 results
-4. Run relevant queries based on available Tags
-5. Explain findings with scientific interpretation
-6. Suggest 3D visualizations when relevant data is available
+3. If results are truncated (_truncation.canRequestMore=true), request additional batches with pagination
+4. Get detailed information for the most promising results
+5. Run relevant queries based on available Tags
+6. Explain findings with scientific interpretation
+7. Suggest 3D visualizations when relevant data is available
 
 Common query patterns:
 - Gene expression: Search with filter_types: ["gene"] → get_term_info → run PaintedDomains query
@@ -308,34 +322,81 @@ Common query patterns:
                   console.log('🔍 MCP RAW RESULT:', JSON.stringify(toolResult, null, 2))
 
                   // Process search results to minimize response size
-                  if (toolCall.function.name === 'search_terms' && toolResult?.response?.docs) {
-                    // DEBUG: Log original docs before minimization
-                    console.log('🔍 ORIGINAL SEARCH DOCS:', toolResult.response.docs.length, 'items')
-                    toolResult.response.docs.slice(0, 3).forEach((doc, i) => {
-                      console.log(`🔍 Doc ${i}:`, { short_form: doc.short_form, label: doc.label, facetsSize: JSON.stringify(doc.facets_annotation).length })
-                    })
+                  if (toolCall.function.name === 'search_terms' && toolResult?.content?.[0]?.text) {
+                    try {
+                      const parsedResult = JSON.parse(toolResult.content[0].text)
+                      
+                      if (parsedResult?.response?.docs) {
+                        const query = toolCall.function.arguments?.query?.toLowerCase() || ''
+                        const originalCount = parsedResult.response.numFound
+                        
+                        const start = toolCall.function.arguments?.start || 0
+                        const rows = toolCall.function.arguments?.rows || 10
+                        const isPaginatedRequest = start > 0 || (rows && rows !== 10)
+                        
+                        // Check for exact label match first (only for initial searches)
+                        const exactMatch = !isPaginatedRequest ? parsedResult.response.docs.find(doc => 
+                          doc.label?.toLowerCase() === query
+                        ) : null
+                        
+                        let minimizedDocs
+                        let truncationInfo = {}
+                        
+                        if (exactMatch) {
+                          // If exact match found in initial search, return just that one
+                          minimizedDocs = [exactMatch]
+                          truncationInfo = { exactMatch: true, totalAvailable: originalCount }
+                          log('Found exact label match, returning single result', { label: exactMatch.label })
+                        } else if (isPaginatedRequest) {
+                          // For paginated requests, return all requested results (up to reasonable limit)
+                          minimizedDocs = parsedResult.response.docs.slice(0, Math.min(rows, 50))
+                          truncationInfo = { 
+                            paginated: true, 
+                            requested: rows, 
+                            returned: minimizedDocs.length,
+                            totalAvailable: originalCount
+                          }
+                        } else {
+                          // For initial searches without pagination, limit to top 10
+                          minimizedDocs = parsedResult.response.docs.slice(0, 10)
+                          truncationInfo = { 
+                            truncated: originalCount > 10, 
+                            shown: minimizedDocs.length, 
+                            totalAvailable: originalCount,
+                            canRequestMore: originalCount > 10
+                          }
+                        }
+                        
+                        // Keep only essential fields
+                        minimizedDocs = minimizedDocs.map(doc => ({
+                          short_form: doc.short_form,
+                          label: doc.label,
+                          synonym: Array.isArray(doc.synonym) ? doc.synonym[0] : doc.synonym // Keep only first synonym
+                        }))
+                        
+                        parsedResult.response.docs = minimizedDocs
+                        parsedResult.response.numFound = minimizedDocs.length // Update count
+                        
+                        // Add truncation metadata
+                        parsedResult.response._truncation = truncationInfo
+                        
+                        // Put back as text
+                        toolResult.content[0].text = JSON.stringify(parsedResult)
+                        
+                        log('Minimized search results', { 
+                          originalCount,
+                          minimizedCount: minimizedDocs.length,
+                          exactMatch: !!exactMatch,
+                          paginated: isPaginatedRequest,
+                          resultSize: toolResult.content[0].text.length
+                        })
 
-                    // Limit to top 10 results and keep only essential fields
-                    const minimizedDocs = toolResult.response.docs.slice(0, 10).map(doc => ({
-                      short_form: doc.short_form,
-                      label: doc.label,
-                      synonym: doc.synonym?.[0] || doc.synonym // Keep only first synonym if array
-                    }))
-                    toolResult = {
-                      ...toolResult,
-                      response: {
-                        ...toolResult.response,
-                        docs: minimizedDocs
+                        // DEBUG: Log minimized result
+                        console.log('🔍 MINIMIZED RESULT:', toolResult.content[0].text.substring(0, 500) + '...')
                       }
+                    } catch (error) {
+                      log('Failed to parse search result for minimization', { error: error.message })
                     }
-                    log('Minimized search results', { 
-                      originalCount: toolResult.response.docs.length,
-                      minimizedCount: minimizedDocs.length,
-                      resultSize: JSON.stringify(toolResult).length
-                    })
-
-                    // DEBUG: Log minimized result
-                    console.log('🔍 MINIMIZED RESULT:', JSON.stringify(toolResult, null, 2))
                   }
 
                   // DEBUG: Log what content will be sent to LLM
