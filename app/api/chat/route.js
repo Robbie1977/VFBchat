@@ -184,9 +184,18 @@ Common query patterns:
           const ollamaStart = Date.now()
           log('Calling Ollama API', { iteration: iteration + 1, messageCount: messages.length })
           
-          // Set up timeout for Ollama calls (5 minutes)
+          // Set up timeout for Ollama calls (longer for iterations with tool results)
+          const hasToolResults = messages.some(msg => msg.role === 'tool')
+          const timeoutMs = hasToolResults ? 600000 : 300000 // 10 minutes with tool results, 5 minutes without
           const controller = new AbortController()
-          const timeoutId = setTimeout(() => controller.abort(), 300000) // 5 minutes
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+          
+          log('Calling Ollama API', { 
+            iteration: iteration + 1, 
+            messageCount: messages.length,
+            timeoutMs,
+            hasToolResults
+          })
           
           const ollamaResponse = await fetch(`${ollamaUrl}/api/chat`, {
             method: 'POST',
@@ -204,8 +213,9 @@ Common query patterns:
 
           // Check for timeout
           if (ollamaResponse.status === undefined) {
+            const timeoutMinutes = timeoutMs / 60000
             log('Ollama API timeout')
-            sendEvent('error', { message: 'Error: Ollama API request timed out (5 minutes)' })
+            sendEvent('error', { message: `Error: Ollama API request timed out (${timeoutMinutes} minutes)` })
             controller.close()
             return
           }
@@ -274,11 +284,11 @@ Common query patterns:
 
                   // Process search results to minimize response size
                   if (toolCall.function.name === 'search_terms' && toolResult?.response?.docs) {
-                    const minimizedDocs = toolResult.response.docs.map(doc => ({
+                    // Limit to top 10 results and keep only essential fields
+                    const minimizedDocs = toolResult.response.docs.slice(0, 10).map(doc => ({
                       short_form: doc.short_form,
                       label: doc.label,
-                      synonym: doc.synonym,
-                      facets_annotation: doc.facets_annotation
+                      synonym: doc.synonym?.[0] || doc.synonym // Keep only first synonym if array
                     }))
                     toolResult = {
                       ...toolResult,
@@ -287,7 +297,11 @@ Common query patterns:
                         docs: minimizedDocs
                       }
                     }
-                    log('Minimized search results', { originalCount: toolResult.response.docs.length })
+                    log('Minimized search results', { 
+                      originalCount: toolResult.response.docs.length,
+                      minimizedCount: minimizedDocs.length,
+                      resultSize: JSON.stringify(toolResult).length
+                    })
                   }
 
                   // Add tool result to conversation
@@ -331,9 +345,10 @@ Common query patterns:
           const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
           const fallbackStart = Date.now()
           
-          // Set up timeout for fallback Ollama call (3 minutes)
+          // Set up timeout for fallback Ollama call (longer since it includes tool results)
           const fallbackController = new AbortController()
-          const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 180000) // 3 minutes
+          const fallbackTimeoutMs = 600000 // 10 minutes for fallback (includes tool results)
+          const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), fallbackTimeoutMs)
           
           const finalOllamaResponse = await fetch(`${ollamaUrl}/api/chat`, {
             method: 'POST',
@@ -350,7 +365,7 @@ Common query patterns:
           // Check for timeout
           if (fallbackResponse.status === undefined) {
             log('Fallback Ollama API timeout')
-            sendEvent('error', { message: 'Error: Fallback Ollama API request timed out (3 minutes)' })
+            sendEvent('error', { message: 'Error: Fallback Ollama API request timed out (10 minutes)' })
             controller.close()
             return
           }
