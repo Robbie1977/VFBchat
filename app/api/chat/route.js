@@ -125,6 +125,22 @@ function replaceTermsWithLinks(text) {
   return result
 }
 
+// Extract term IDs from a message containing markdown links like [term](id)
+function extractTermIds(text) {
+  const idSet = new Set()
+  // Match markdown links and extract the URL part
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g
+  let match
+  while ((match = linkRegex.exec(text)) !== null) {
+    const id = match[2]
+    // Only include VFB IDs (start with VFB or FBbt)
+    if (id.startsWith('VFB') || id.startsWith('FBbt')) {
+      idSet.add(id)
+    }
+  }
+  return Array.from(idSet)
+}
+
 // Initialize cache with common VFB terms
 function seedLookupCache() {
   const commonTerms = {
@@ -364,10 +380,47 @@ Common query patterns:
 - Connectivity: Search with filter_types: ["has_neuron_connectivity"] → run Connectivity queries`
 
         // Initial messages
+        const resolvedUserMessage = replaceTermsWithLinks(message)
         const messages = [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: replaceTermsWithLinks(message) }
+          { role: 'user', content: resolvedUserMessage }
         ]
+
+        // Pre-fetch term info for any resolved terms to speed up responses
+        const termIds = extractTermIds(resolvedUserMessage)
+        if (termIds.length > 0 && mcpClient) {
+          log('Pre-fetching term info for IDs:', termIds)
+          try {
+            const termInfoPromises = termIds.map(async (id) => {
+              try {
+                const result = await mcpClient.callTool({
+                  name: 'get_term_info',
+                  arguments: { id }
+                })
+                return { id, result: result.content[0]?.text || 'No info available' }
+              } catch (error) {
+                log(`Failed to fetch term info for ${id}:`, error.message)
+                return { id, result: `Error fetching info: ${error.message}` }
+              }
+            })
+
+            const termInfos = await Promise.all(termInfoPromises)
+            
+            // Add pre-fetched term info as a system message
+            const termInfoContext = termInfos.map(info => 
+              `Pre-fetched info for ${info.id}:\n${info.result}`
+            ).join('\n\n')
+            
+            messages.splice(1, 0, { 
+              role: 'system', 
+              content: `The user query contains the following resolved VFB terms. Here is pre-fetched detailed information for each term to help you provide accurate responses:\n\n${termInfoContext}\n\nUse this information in your response and avoid making redundant get_term_info calls for these terms.` 
+            })
+            
+            log(`Added pre-fetched info for ${termIds.length} terms`)
+          } catch (error) {
+            log('Failed to pre-fetch term info:', error.message)
+          }
+        }
 
         let finalResponse = ''
         const maxIterations = 3
