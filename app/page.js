@@ -17,7 +17,7 @@ export default function Home() {
   const [thinkingMessage, setThinkingMessage] = useState('Thinking')
 
   // Function to create VFB browser URL
-  const createVFBUrl = (scene) => {
+  function createVFBUrl(scene) {
     if (!scene.id) return '#'
     const baseUrl = 'https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto'
     return `${baseUrl}?id=${encodeURIComponent(scene.id)}${scene.i ? `&i=${encodeURIComponent(scene.i)}` : ''}`
