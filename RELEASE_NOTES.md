@@ -1,3 +1,15 @@
+Release 2.2.9
+
+This release optimizes VFB data queries and prevents LLM hallucinations when running analytical queries.
+
+Changes:
+- Optimized query strategy to avoid unnecessary get_term_info calls when displaying multiple neurons in VFB browser
+- Enhanced logging to show "pulling info on [ID]" status messages for better user visibility
+- Prevented hallucinated query types by requiring get_term_info before run_query calls
+- Updated system prompt to only use valid query types from the Queries array returned by get_term_info
+- Improved efficiency for bulk neuron display while maintaining accuracy for analytical queries
+- Enhanced user experience with clearer status updates during data retrieval
+
 Release 2.2.8
 
 This release fixes incorrect linking of FlyBase reference IDs (FBrf) to point to FlyBase instead of Virtual Fly Brain.
