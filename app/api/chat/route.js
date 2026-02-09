@@ -795,6 +795,10 @@ Use full markdown in your responses: **bold** for term names, bullet lists for m
             
             for (const toolCall of assistantMessage.tool_calls) {
                 const toolStart = Date.now()
+                
+                // Parse tool arguments (OpenAI returns JSON string, Ollama returned object)
+                const parsedArgs = parseToolArguments(toolCall.function.arguments)
+                
                 log('Executing tool call', { 
                   name: toolCall.function.name, 
                   args: toolCall.function.name === 'get_term_info' && parsedArgs?.id ? 
@@ -804,9 +808,6 @@ Use full markdown in your responses: **bold** for term names, bullet lists for m
                 
                 try {
                   let toolResult = null
-
-                  // Parse tool arguments (OpenAI returns JSON string, Ollama returned object)
-                  const parsedArgs = parseToolArguments(toolCall.function.arguments)
 
                   // FAST LOCAL TERM RESOLUTION: Try local cache first for get_term_info
                   if (toolCall.function.name === 'get_term_info' && parsedArgs?.id) {

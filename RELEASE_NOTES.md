@@ -1,3 +1,13 @@
+Release 2.2.11
+
+This release fixes a critical bug in tool call processing that was causing crashes when the LLM made MCP queries.
+
+Changes:
+- Fixed variable scoping bug where `parsedArgs` was referenced before declaration in tool call processing
+- Resolved "parsedArgs is not defined" error that occurred during connectivity queries
+- Improved stability of MCP tool call execution
+- Enhanced error handling for tool argument parsing
+
 Release 2.2.10
 
 This release adds table rendering support for connectivity data and improves LLM understanding of neuron class vs individual connectivity queries.
