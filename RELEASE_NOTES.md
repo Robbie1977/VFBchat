@@ -1,3 +1,14 @@
+Release 2.2.8
+
+This release fixes incorrect linking of FlyBase reference IDs (FBrf) to point to FlyBase instead of Virtual Fly Brain.
+
+Changes:
+- Fixed FBrf ID links to route to FlyBase (https://flybase.org/reports/FBrfXXXXXXX) instead of VFB
+- VFB and FBbt IDs continue to link to Virtual Fly Brain as appropriate
+- Added distinct tooltips: 'View in FlyBase' vs 'View in VFB' for better user guidance
+- Improved link routing logic to handle different ID types correctly
+- Enhanced user experience when accessing publication references from VFB data
+
 Release 2.2.7
 
 This release fixes image clipping issues in the chat interface by improving how VFB thumbnail images are displayed.
