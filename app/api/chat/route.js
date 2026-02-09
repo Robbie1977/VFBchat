@@ -158,7 +158,7 @@ function summarizeTermInfo(termInfoText) {
     
     // Format as concise text
     let result = `${summary.id}: ${summary.name || 'Unknown'}`
-    if (summary.definition) result += ` - ${summary.definition.substring(0, 150)}${summary.definition.length > 150 ? '...' : ''}`
+    if (summary.definition) result += ` - ${summary.definition.substring(0, 300)}${summary.definition.length > 300 ? '...' : ''}`
     if (summary.superTypes.length > 0) result += ` (SuperTypes: ${summary.superTypes.join(', ')})`
     if (summary.tags.length > 0) result += ` (Tags: ${summary.tags.join(', ')})`
     
