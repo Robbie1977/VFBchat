@@ -171,9 +171,11 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
           alt={alt || 'VFB Image'}
           className="vfb-thumb"
           style={{
-            width: '64px',
-            height: '64px',
-            objectFit: 'cover',
+            maxWidth: '120px',
+            maxHeight: '64px',
+            width: 'auto',
+            height: 'auto',
+            objectFit: 'contain',
             border: '1px solid #444',
             borderRadius: '4px',
             cursor: 'pointer',
