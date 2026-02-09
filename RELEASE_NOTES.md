@@ -1,3 +1,14 @@
+Release 2.2.1
+
+This release fixes a critical bug where thumbnail images were displaying placeholder URLs ("...") instead of actual image IDs, preventing proper visualization of VFB neuroscience images.
+
+Changes:
+- Fixed system prompt to correctly reference "Images" field instead of outdated "Examples" field
+- Updated term info summarization to include actual thumbnail URLs from VFB API responses
+- Enhanced pre-fetched term info to provide real image URLs to the LLM
+- Improved LLM instructions for extracting and using thumbnail URLs from get_term_info responses
+- Added detailed examples of VFB image URL structure in system prompt
+
 Release 2.2.0
 
 This release adds comprehensive usage monitoring and responsible AI usage guidelines to enhance user experience and system quality control.

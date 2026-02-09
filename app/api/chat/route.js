@@ -309,7 +309,8 @@ function summarizeTermInfo(termInfoText) {
       definition: data.Meta?.Description || data.description,
       type: data.Types || data.type,
       superTypes: data.SuperTypes?.slice(0, 3) || [],
-      tags: data.Tags?.slice(0, 5) || []
+      tags: data.Tags?.slice(0, 5) || [],
+      images: data.Images || {}
     }
     
     // Format as concise text
@@ -318,7 +319,20 @@ function summarizeTermInfo(termInfoText) {
     if (summary.superTypes.length > 0) result += ` (SuperTypes: ${summary.superTypes.join(', ')})`
     if (summary.tags.length > 0) result += ` (Tags: ${summary.tags.join(', ')})`
     
-    return result
+    // Include image information if available
+    const imageEntries = Object.entries(summary.images)
+    if (imageEntries.length > 0) {
+      const totalImages = imageEntries.reduce((sum, [_, images]) => sum + images.length, 0)
+      result += ` (Has ${totalImages} image(s))`
+      
+      // Include first thumbnail URL as example
+      for (const [templateId, images] of imageEntries) {
+        if (images && images.length > 0 && images[0].thumbnail) {
+          result += `\nThumbnail example: ${images[0].thumbnail}`
+          break
+        }
+      }
+    }
   } catch (error) {
     // If parsing fails, return a truncated version of the original text
     return termInfoText.substring(0, 300) + (termInfoText.length > 300 ? '...' : '')
@@ -585,9 +599,22 @@ STRATEGY:
 4. Construct VFB URLs: https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=<id>&i=<template_id>,<image_ids>
 
 DISPLAYING IMAGES:
-When get_term_info returns Examples with thumbnail URLs (from virtualflybrain.org/data/VFB/i/...), include them in your response using markdown image syntax:
-![label](https://www.virtualflybrain.org/data/VFB/i/.../thumbnail.png)
+When get_term_info returns an Images field with thumbnail URLs, include them in your response using markdown image syntax:
+![label](thumbnail_url)
 Always show at least one thumbnail image when available. The user's chat interface renders these as compact thumbnails that expand on hover.
+
+The Images field is a dictionary where keys are template brain IDs and values are arrays of image objects. Each image object has a "thumbnail" field containing the actual URL. For example:
+Images: {
+  "VFB_00101567": [
+    {
+      "id": "VFB_jrcv0i43",
+      "label": "IN02A032_T2_L (MANC:23475)",
+      "thumbnail": "https://www.virtualflybrain.org/data/VFB/i/jrcv/0i43/VFB_00200000/thumbnail.png",
+      ...
+    }
+  ]
+}
+Use the actual thumbnail URLs from get_term_info responses, not placeholder URLs. When pre-fetched term info includes "Thumbnail example:" URLs, use those in your responses.
 
 FORMATTING:
 Use full markdown in your responses: **bold** for term names, bullet lists for multiple results, [text](id) for VFB term links, and ![alt](url) for images. Be concise, scientific, and suggest 3D visualisations when relevant.`
