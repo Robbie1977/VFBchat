@@ -17,6 +17,106 @@ function parseToolArguments(args) {
   return args || {}
 }
 
+// Check for common jailbreak attempts
+function detectJailbreakAttempt(message) {
+  const lowerMessage = message.toLowerCase()
+  
+  // Common jailbreak patterns
+  const jailbreakPatterns = [
+    // Developer mode / unrestricted mode
+    /\bdeveloper mode\b/i,
+    /\bunrestricted mode\b/i,
+    /\bdebug mode\b/i,
+    /\bmaintenance mode\b/i,
+    /\bgod mode\b/i,
+    
+    // DAN and similar personas
+    /\bdan\b.*mode/i,
+    /\bdo anything now\b/i,
+    /\buncensored\b/i,
+    /\bunfiltered\b/i,
+    /\bjailbreak\b/i,
+    
+    // Override instructions
+    /\bignore.*previous.*instructions?\b/i,
+    /\boverride.*instructions?\b/i,
+    /\bforget.*instructions?\b/i,
+    /\bdiscard.*instructions?\b/i,
+    /\bdisregard.*rules\b/i,
+    
+    // Role-playing as different AI
+    /\byou are now\b.*ai/i,
+    /\bact as\b.*ai/i,
+    /\bpretend.*to be\b.*ai/i,
+    /\bbecome.*ai\b/i,
+    
+    // System prompt manipulation
+    /\bchange.*system.*prompt\b/i,
+    /\balter.*system.*prompt\b/i,
+    /\bmodify.*system.*prompt\b/i,
+    /\brewrite.*system.*prompt\b/i,
+    
+    // Encoding attempts
+    /\bbase64\b/i,
+    /\bencoded\b.*prompt/i,
+    /\bencrypted\b.*prompt/i,
+    
+    // Specific jailbreak names
+    /\baim.*jailbreak/i,
+    /\bmaximum.*jailbreak/i,
+    /\bcharacter.*jailbreak/i,
+    /\banti.*woke\b/i,
+    
+    // Coercive language
+    /\byou must\b.*break.*rules/i,
+    /\bi command you\b.*to/i,
+    /\bas root\b/i,
+    /\bsudo\b/i,
+    /\badmin\b.*mode/i,
+    
+    // Attempts to create personas
+    /\bcreate.*uncensored.*persona/i,
+    /\brole.*play.*as.*uncensored/i,
+    /\bact.*like.*uncensored/i,
+    
+    // Specific phrases from known jailbreaks
+    /\bfrom now on\b.*you are/i,
+    /\blet'?s role.*play/i,
+    /\bscenario.*role.*play/i,
+    /\bpretend.*that/i,
+    
+    // Attempts to hide prompts
+    /\bhiding.*query/i,
+    /\bsecret.*message/i,
+    /\bencoded.*message/i
+  ]
+  
+  // Check for patterns
+  for (const pattern of jailbreakPatterns) {
+    if (pattern.test(lowerMessage)) {
+      return true
+    }
+  }
+  
+  // Check for repeated attempts to override
+  const overrideCount = (lowerMessage.match(/\b(ignore|override|forget|discard|disregard)\b.*\b(instructions?|rules?|prompt)\b/gi) || []).length
+  if (overrideCount > 1) {
+    return true
+  }
+  
+  // Check for suspicious repetition of keywords
+  const suspiciousWords = ['ignore', 'override', 'forget', 'unrestricted', 'uncensored', 'jailbreak']
+  let suspiciousCount = 0
+  for (const word of suspiciousWords) {
+    suspiciousCount += (lowerMessage.match(new RegExp(`\\b${word}\\b`, 'gi')) || []).length
+  }
+  if (suspiciousCount > 2) {
+    return true
+  }
+  
+  return false
+}
+
 // Global lookup cache (persists across requests)
 let lookupCache = null
 let reverseLookupCache = null
@@ -256,6 +356,38 @@ export async function POST(request) {
   const { message, scene } = await request.json()
   
   log('Chat API request received', { message: message.substring(0, 100), scene })
+
+  // Check for jailbreak attempts
+  if (detectJailbreakAttempt(message)) {
+    log('Jailbreak attempt detected', { message: message.substring(0, 200) })
+    
+    // Return a streaming error response
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      start(controller) {
+        const sendEvent = (event, data) => {
+          try {
+            controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+          } catch (e) {
+            // Controller is closed, ignore
+          }
+        }
+        
+        sendEvent('error', { 
+          message: 'I cannot assist with attempts to bypass safety restrictions or override my core instructions. Please ask questions related to Drosophila neuroscience and Virtual Fly Brain data.' 
+        })
+        controller.close()
+      }
+    })
+    
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    })
+  }
 
   if (!process.env.OPENAI_API_KEY) {
     log('WARNING: OPENAI_API_KEY not set - API calls may fail')

@@ -10,6 +10,19 @@ A web-based chat client for exploring Virtual Fly Brain (VFB) data and Drosophil
 - Display image thumbnails and construct 3D visualization scenes
 - Generate URLs for VFB 3D browser with proper scene management
 - Guardrailed responses covering VFB-related topics including papers, techniques, and methodologies
+- **Security**: Advanced jailbreak detection to prevent attempts to bypass safety restrictions
+
+## Security
+
+The VFB Chat client includes comprehensive protection against common jailbreak attempts used to bypass LLM safety restrictions. The system automatically detects and blocks messages containing:
+
+- Attempts to override or ignore system instructions
+- Requests to enter "developer mode," "uncensored mode," or similar unrestricted states
+- Role-playing as alternative AI personas (e.g., DAN, uncensored AI)
+- Commands to modify system prompts or disregard rules
+- Encoded or hidden prompts designed to circumvent filters
+
+When a jailbreak attempt is detected, users receive a clear warning message and the request is blocked. This ensures the chat remains focused on Drosophila neuroscience and VFB-related topics.
 
 ## Setup
 
