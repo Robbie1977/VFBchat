@@ -43,6 +43,7 @@ The VFB Chat client includes Google Analytics integration to monitor usage patte
 - Query text is truncated to prevent storage of long or sensitive content
 - No personally identifiable information is collected
 - Analytics data is used solely for quality control and system improvement
+- A clear disclaimer is displayed at the bottom of the chat interface
 
 ### Important AI Usage Guidelines
 **Please verify all information provided by the AI assistant:**

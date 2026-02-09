@@ -390,6 +390,23 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
         </div>
       )}
 
+      {/* Footer disclaimer */}
+      <div style={{
+        marginTop: '12px',
+        padding: '8px 12px',
+        backgroundColor: '#1a1a1a',
+        border: '1px solid #333',
+        borderRadius: '4px',
+        fontSize: '0.75em',
+        color: '#888',
+        lineHeight: '1.3',
+        flexShrink: 0
+      }}>
+        <strong>AI Response Notice:</strong> This tool provides AI-generated information based on Virtual Fly Brain data.
+        Always verify critical information with primary sources. Conversations are recorded for quality assurance and system improvement.
+        Do not share confidential, sensitive, or personal information.
+      </div>
+
       <style jsx global>{`
         .vfb-thumb-wrap:hover .vfb-thumb-expanded {
           display: block !important;
