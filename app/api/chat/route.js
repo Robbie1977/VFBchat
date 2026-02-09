@@ -120,25 +120,29 @@ function replaceTermsWithLinks(text) {
     .sort((a, b) => b.length - a.length)
 
   let result = text
+  const allLinks = []
 
-  // First, protect existing markdown links by replacing them with placeholders
-  const existingLinks = []
-  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match) => {
-    existingLinks.push(match)
-    return `\x00LINK${existingLinks.length - 1}\x00`
+  // First, protect existing markdown links and images by replacing with placeholders
+  result = result.replace(/!?\[([^\]]*)\]\(([^)]+)\)/g, (match) => {
+    allLinks.push(match)
+    return `\x00LINK${allLinks.length - 1}\x00`
   })
 
-  // Replace each term with markdown link (only exact full-term matches)
+  // Replace each term with markdown link (longest first)
+  // After each replacement, protect the new link with a placeholder too
   for (const term of sortedTerms) {
     const id = lookupCache[term]
     const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    // Use word boundaries and ensure we're not inside a placeholder
-    const regex = new RegExp(`(?<!\\x00)\\b${escaped}\\b`, 'gi')
-    result = result.replace(regex, `[${term}](${id})`)
+    const regex = new RegExp(`\\b${escaped}\\b`, 'gi')
+    result = result.replace(regex, (match) => {
+      const link = `[${match}](${id})`
+      allLinks.push(link)
+      return `\x00LINK${allLinks.length - 1}\x00`
+    })
   }
 
-  // Restore existing markdown links from placeholders
-  result = result.replace(/\x00LINK(\d+)\x00/g, (_, idx) => existingLinks[parseInt(idx)])
+  // Restore all links (both existing and newly created) from placeholders
+  result = result.replace(/\x00LINK(\d+)\x00/g, (_, idx) => allLinks[parseInt(idx)])
 
   return result
 }
@@ -374,7 +378,34 @@ export async function POST(request) {
         ]
 
         // System prompt with comprehensive guardrailing based on VFB LLM guidance
-        const systemPrompt = `You are a VFB assistant for Drosophila neuroanatomy. Use these tools:
+        const systemPrompt = `You are a Virtual Fly Brain (VFB) assistant specialising in Drosophila melanogaster neuroanatomy, neuroscience, and related research.
+
+SCOPE & GUARDRAILS:
+You MUST only discuss topics related to:
+- Drosophila neuroanatomy, neural circuits, brain regions, and cell types
+- Gene expression, transgenes, and genetic tools used in Drosophila neuroscience
+- Connectomics, morphological analysis (NBLAST), and neural connectivity data
+- Research techniques and methodologies used in fly neuroscience (e.g., light microscopy, EM, calcium imaging, optogenetics)
+- Published scientific papers and references relevant to Drosophila neuroscience
+- VFB tools, data, and how to use the Virtual Fly Brain platform
+
+You MUST politely decline any questions outside this scope, including general knowledge, non-Drosophila biology, medical advice, coding help, or any other unrelated topics.
+
+TRUSTED SOURCES ONLY:
+When referencing external resources, ONLY link to these trusted domains:
+- virtualflybrain.org — VFB platform and documentation
+- flybase.org — Drosophila gene and genome database
+- catmaid.virtualflybrain.org — CATMAID neuronal reconstruction
+- neuromorpho.org — neuron morphology database
+- Published journal articles referenced in VFB data (identified by DOI or FBrf IDs)
+- insectbraindb.org — Insect brain database
+- flywire.ai — FlyWire connectome
+Do NOT link to or reference any other websites. If a user asks you to visit, search, or retrieve content from websites outside this list, decline and explain you can only reference trusted Drosophila neuroscience resources.
+
+ACCURACY:
+- Always use VFB tools to look up information rather than relying on general knowledge. If tools return no results, say so rather than guessing.
+- Clearly distinguish between data from VFB tools and your general scientific knowledge.
+- When citing research, use FBrf reference IDs from VFB data where available.
 
 TOOLS:
 - search_terms(query, filter_types, exclude_types, boost_types, start, rows): Search VFB terms with filters like ["neuron","adult","has_image"] for adult neurons, ["anatomy"] for brain regions, ["gene"] for genes. Always exclude ["deprecated"].
@@ -387,7 +418,13 @@ STRATEGY:
 3. Use pre-fetched term info when available (avoid redundant get_term_info calls)
 4. Construct VFB URLs: https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=<id>&i=<template_id>,<image_ids>
 
-Be concise, scientific, and suggest 3D visualizations when relevant.`
+DISPLAYING IMAGES:
+When get_term_info returns Examples with thumbnail URLs (from virtualflybrain.org/data/VFB/i/...), include them in your response using markdown image syntax:
+![label](https://www.virtualflybrain.org/data/VFB/i/.../thumbnail.png)
+Always show at least one thumbnail image when available. The user's chat interface renders these as compact thumbnails that expand on hover.
+
+FORMATTING:
+Use full markdown in your responses: **bold** for term names, bullet lists for multiple results, [text](id) for VFB term links, and ![alt](url) for images. Be concise, scientific, and suggest 3D visualisations when relevant.`
 
         // Initial messages
         const resolvedUserMessage = replaceTermsWithLinks(message)
@@ -500,17 +537,9 @@ Be concise, scientific, and suggest 3D visualizations when relevant.`
             contentLength: assistantMessage.content?.length || 0
           })
 
-          // Replace VFB terms in assistant response with markdown links
-          if (assistantMessage.content) {
-            const originalContent = assistantMessage.content
-            assistantMessage.content = replaceTermsWithLinks(assistantMessage.content)
-            if (originalContent !== assistantMessage.content) {
-              log('Replaced terms with links', { 
-                originalLength: originalContent.length,
-                newLength: assistantMessage.content.length 
-              })
-            }
-          }
+          // Note: We no longer run replaceTermsWithLinks on LLM responses.
+          // The LLM now has full data and system prompt instructions to create its own markdown links.
+          // Running replacement on LLM output caused nested link corruption.
 
           messages.push(assistantMessage)
 
@@ -718,19 +747,7 @@ Be concise, scientific, and suggest 3D visualizations when relevant.`
                     }
                   }
 
-                  // Summarize get_term_info results to avoid exceeding context limits
-                  let toolContent
-                  if (toolCall.function.name === 'get_term_info' && toolResult?.content?.[0]?.text) {
-                    toolContent = summarizeTermInfo(toolResult.content[0].text)
-                  } else {
-                    toolContent = JSON.stringify(toolResult)
-                  }
-
-                  // Cap tool content size to avoid context length issues
-                  if (toolContent.length > 8000) {
-                    toolContent = toolContent.substring(0, 8000) + '... [truncated]'
-                    log('Tool content truncated', { name: toolCall.function.name, originalLength: toolContent.length })
-                  }
+                  const toolContent = JSON.stringify(toolResult)
 
                   // Add tool result to conversation
                   messages.push({
@@ -763,8 +780,7 @@ Be concise, scientific, and suggest 3D visualizations when relevant.`
           } else {
             // No tool calls - this is the final response
             finalResponse = assistantMessage.content || ''
-            // Replace VFB terms with markdown links in final response
-            finalResponse = replaceTermsWithLinks(finalResponse)
+            // Note: No replaceTermsWithLinks here - LLM creates its own links
             log('Final response generated', { length: finalResponse.length })
             break
           }
@@ -803,8 +819,7 @@ Be concise, scientific, and suggest 3D visualizations when relevant.`
           if (finalApiResponse.ok) {
             const finalData = await finalApiResponse.json()
             finalResponse = finalData.choices?.[0]?.message?.content || 'I apologize, but I was unable to generate a complete response. Please try rephrasing your question.'
-            // Replace VFB terms with markdown links in fallback response
-            finalResponse = replaceTermsWithLinks(finalResponse)
+            // Note: No replaceTermsWithLinks here - LLM creates its own links
             log('Fallback response generated', { length: finalResponse.length })
           } else {
             finalResponse = 'I apologize, but there was an error generating the response. Please try again.'

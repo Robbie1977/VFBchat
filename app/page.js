@@ -150,20 +150,51 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
 
   const renderImage = ({ src, alt }) => {
     const isThumbnail = src && src.includes('virtualflybrain.org/data/VFB')
+    if (!isThumbnail) {
+      return (
+        <span style={{ display: 'inline-block', margin: '4px', verticalAlign: 'middle' }}>
+          <img src={src} alt={alt || 'Image'} style={{ maxWidth: '300px', maxHeight: '200px', borderRadius: '4px' }} />
+        </span>
+      )
+    }
+    // VFB thumbnail: compact with hover-to-expand
     return (
-      <span style={{ display: 'inline-block', margin: '4px', verticalAlign: 'middle' }}>
+      <span className="vfb-thumb-wrap" style={{ display: 'inline-block', margin: '4px', verticalAlign: 'middle', position: 'relative' }}>
         <img
           src={src}
           alt={alt || 'VFB Image'}
+          className="vfb-thumb"
           style={{
-            maxWidth: isThumbnail ? '80px' : '200px',
-            maxHeight: isThumbnail ? '80px' : '200px',
+            width: '64px',
+            height: '64px',
             objectFit: 'cover',
             border: '1px solid #444',
             borderRadius: '4px',
-            verticalAlign: 'middle'
+            cursor: 'pointer',
+            verticalAlign: 'middle',
+            transition: 'opacity 0.15s'
           }}
         />
+        <span className="vfb-thumb-expanded" style={{
+          position: 'absolute',
+          bottom: '100%',
+          left: '0',
+          display: 'none',
+          backgroundColor: '#111',
+          border: '1px solid #444',
+          borderRadius: '6px',
+          padding: '6px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.7)',
+          zIndex: 1000,
+          whiteSpace: 'nowrap'
+        }}>
+          <img
+            src={src}
+            alt={alt || 'VFB Image'}
+            style={{ maxWidth: '280px', maxHeight: '280px', borderRadius: '4px', display: 'block' }}
+          />
+          {alt && <span style={{ display: 'block', fontSize: '11px', color: '#aaa', marginTop: '4px', textAlign: 'center' }}>{alt}</span>}
+        </span>
       </span>
     )
   }
@@ -333,6 +364,15 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
           </a>
         </div>
       )}
+
+      <style jsx global>{`
+        .vfb-thumb-wrap:hover .vfb-thumb-expanded {
+          display: block !important;
+        }
+        .vfb-thumb-wrap:hover .vfb-thumb {
+          opacity: 0.7;
+        }
+      `}</style>
     </div>
   )
 }
