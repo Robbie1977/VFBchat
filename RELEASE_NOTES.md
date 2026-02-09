@@ -1,3 +1,17 @@
+Release 2.2.6
+
+This release fixes a critical issue where the LLM was losing conversation context between messages, preventing proper follow-up responses.
+
+Changes:
+- Fixed conversation context loss by sending full chat history to API
+- Updated frontend to include conversation history in API requests
+- Modified backend to process conversation context in LLM prompts
+- Maintains system instructions while preserving chat history
+- Improved user experience for multi-turn conversations
+- Enhanced LLM context awareness for related queries
+
+This resolves the issue where asking "name a neuron in this region" after "medulla?" would result in the AI asking for clarification instead of remembering the medulla context.
+
 Release 2.2.5
 
 This release refines thumbnail image selection by using precise VFB data structure logic based on IsClass and has_image fields.
