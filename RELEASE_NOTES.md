@@ -1,3 +1,16 @@
+Release 2.2.17
+
+This release adds configurable timeouts to MCP tool calls to prevent indefinite hangs when querying complex anatomical structures, improving reliability for mushroom body and other complex brain region queries.
+
+Changes:
+- Added callToolWithTimeout wrapper function for all MCP tool calls
+- Configured 30-second timeout for regular tool calls (get_term_info, search_terms)
+- Configured 15-second timeout for optional pre-fetching operations
+- Configured 60-second timeout for initial cache loading operations
+- Prevents 60-second hangs that were causing MCP error -32001 timeouts
+- Application now fails gracefully with clear timeout messages instead of hanging
+- Improved user experience for complex anatomical queries that require longer server processing
+
 Release 2.2.16
 
 This release fixes a critical runtime error that was preventing the chat API from functioning, and adds configurable timeouts to prevent MCP server timeouts for complex anatomical queries.
