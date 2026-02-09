@@ -24,6 +24,32 @@ The VFB Chat client includes comprehensive protection against common jailbreak a
 
 When a jailbreak attempt is detected, users receive a clear warning message and the request is blocked. This ensures the chat remains focused on Drosophila neuroscience and VFB-related topics.
 
+## Usage Monitoring and AI Guidelines
+
+### Analytics and Quality Control
+The VFB Chat client includes Google Analytics integration to monitor usage patterns and ensure quality control. All user queries and AI responses are tracked anonymously for:
+- Usage monitoring and system performance analysis
+- Quality control and improvement of responses
+- Research into user interaction patterns with neuroscience data
+
+### Important AI Usage Guidelines
+**Please verify all information provided by the AI assistant:**
+- AI-generated responses may contain inaccuracies or outdated information
+- Always cross-reference critical information with primary sources
+- Use VFB links provided in responses to access authoritative data
+- Report any concerns about response quality to the development team
+
+**Privacy and Security:**
+- Conversations may be monitored for quality control purposes
+- No personally identifiable information should be shared in queries
+- Confidential or sensitive research data should not be included in prompts
+- The system is designed for educational and research purposes within Drosophila neuroscience
+
+**Responsible Use:**
+- Use this tool to enhance, not replace, your understanding of neuroscience concepts
+- Cite appropriate sources when using information in research or publications
+- Respect intellectual property and data usage rights of VFB and related resources
+
 ## Setup
 
 1. Ensure Docker and Docker Compose are installed.

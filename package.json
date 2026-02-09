@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "axios": "^1.13.5",
     "eventsource": "^4.1.0",
     "next": "14.0.0",
     "react": "^18",

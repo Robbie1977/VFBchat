@@ -46,6 +46,12 @@ export default function Home() {
         role: 'assistant',
         content: `Welcome to VFB Chat! I'm here to help you explore Drosophila neuroanatomy and neuroscience using Virtual Fly Brain data.
 
+**Important AI Usage Guidelines:**
+- Always verify information from AI responses with primary sources
+- Conversations are monitored for quality control and system improvement
+- Do not share confidential or sensitive information
+- Use this tool to enhance your understanding of neuroscience concepts
+
 Here are some example queries you can try:
 - What neurons are involved in visual processing?
 - Show me images of Kenyon cells

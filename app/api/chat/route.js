@@ -3,10 +3,40 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import fs from 'fs'
 import path from 'path'
+import axios from 'axios'
+
+// GA4 Analytics configuration
+const GA_MEASUREMENT_ID = process.env.GA_MEASUREMENT_ID || 'G-K7DDZVVXM7'
+const GA_API_SECRET = process.env.GA_API_SECRET || ''
+const GA_ENABLED = !!(GA_MEASUREMENT_ID && GA_API_SECRET)
 
 function log(message, data = {}) {
   const timestamp = new Date().toISOString()
   console.log(`[${timestamp}] ${message}`, Object.keys(data).length ? data : '')
+}
+
+// Track user queries and responses to Google Analytics
+function trackQuery(query, responseLength, duration, sessionId) {
+  if (!GA_ENABLED) return
+  
+  const payload = {
+    client_id: sessionId || 'anonymous',
+    events: [{
+      name: 'chat_query',
+      params: {
+        query_length: query.length,
+        response_length: responseLength,
+        duration_ms: duration,
+        session_id: sessionId,
+        timestamp: new Date().toISOString()
+      }
+    }]
+  }
+  
+  axios.post(
+    `https://www.google-analytics.com/mp/collect?measurement_id=${GA_MEASUREMENT_ID}&api_secret=${GA_API_SECRET}`,
+    payload
+  ).catch(() => {}) // Silent fail for analytics
 }
 
 // Parse tool arguments - OpenAI returns JSON string, Ollama returns object
@@ -980,6 +1010,9 @@ Use full markdown in your responses: **bold** for term names, bullet lists for m
           responseLength: finalResponse.length, 
           imagesCount: images.length 
         })
+
+        // Track query for analytics
+        trackQuery(message, finalResponse.length, totalDuration, `session_${Date.now()}`)
 
         // Send final result
         sendEvent('result', { response: finalResponse, images, newScene: scene })
