@@ -121,14 +121,24 @@ function replaceTermsWithLinks(text) {
 
   let result = text
 
-  // Replace each term with markdown link
+  // First, protect existing markdown links by replacing them with placeholders
+  const existingLinks = []
+  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match) => {
+    existingLinks.push(match)
+    return `\x00LINK${existingLinks.length - 1}\x00`
+  })
+
+  // Replace each term with markdown link (only exact full-term matches)
   for (const term of sortedTerms) {
     const id = lookupCache[term]
-    // Use word boundaries to avoid partial matches within words
-    const regex = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi')
-    const link = `[${term}](${id})`
-    result = result.replace(regex, link)
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    // Use word boundaries and ensure we're not inside a placeholder
+    const regex = new RegExp(`(?<!\\x00)\\b${escaped}\\b`, 'gi')
+    result = result.replace(regex, `[${term}](${id})`)
   }
+
+  // Restore existing markdown links from placeholders
+  result = result.replace(/\x00LINK(\d+)\x00/g, (_, idx) => existingLinks[parseInt(idx)])
 
   return result
 }

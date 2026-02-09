@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
+import ReactMarkdown from 'react-markdown'
 
 export default function Home() {
   const searchParams = useSearchParams()
@@ -15,123 +16,17 @@ export default function Home() {
   const [isThinking, setIsThinking] = useState(false)
   const [thinkingDots, setThinkingDots] = useState('.')
   const [thinkingMessage, setThinkingMessage] = useState('Thinking')
+  const chatEndRef = useRef(null)
 
-  // Function to create VFB browser URL
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, isThinking, thinkingDots])
+
   function createVFBUrl(scene) {
     if (!scene.id) return '#'
     const baseUrl = 'https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto'
     return `${baseUrl}?id=${encodeURIComponent(scene.id)}${scene.i ? `&i=${encodeURIComponent(scene.i)}` : ''}`
-  }
-
-  // Function to render text with markdown links and handle newlines/thumbnails
-  const renderTextWithLinks = (text) => {
-    if (!text) return text
-
-    // First handle VFB thumbnail URLs
-    const thumbnailRegex = /https:\/\/www\.virtualflybrain\.org\/data\/VFB\/i\/[^/]+\/[^/]+\/thumbnail(?:T)?\.png/g
-    text = text.replace(thumbnailRegex, (match) => {
-      const isTransparent = match.includes('thumbnailT.png')
-      const baseUrl = match.replace('/thumbnail.png', '').replace('/thumbnailT.png', '')
-      return `<inline-thumbnail data-url="${baseUrl}/volume.nrrd" data-thumb="${match}"></inline-thumbnail>`
-    })
-
-    // Split by newlines and process each line
-    const lines = text.split('\n')
-    const processedLines = lines.map((line, lineIndex) => {
-      // Convert markdown links [text](url) to clickable links
-      const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g
-      const parts = []
-      let lastIndex = 0
-      let match
-
-      while ((match = linkRegex.exec(line)) !== null) {
-        // Add text before the link
-        if (match.index > lastIndex) {
-          parts.push(line.slice(lastIndex, match.index))
-        }
-
-        // Add the link
-        const linkText = match[1]
-        const linkUrl = match[2]
-        parts.push(
-          <a
-            key={`${lineIndex}-${match.index}`}
-            href={linkUrl.startsWith('http') ? linkUrl : `https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=${linkUrl}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: '#4a9eff', textDecoration: 'none', fontWeight: 'bold' }}
-            title={`View ${linkText} in VFB`}
-          >
-            {linkText}
-          </a>
-        )
-
-        lastIndex = match.index + match[0].length
-      }
-
-      // Handle inline thumbnails
-      const thumbnailParts = []
-      let currentText = lastIndex < line.length ? line.slice(lastIndex) : ''
-
-      if (currentText.includes('<inline-thumbnail')) {
-        const thumbRegex = /<inline-thumbnail data-url="([^"]+)" data-thumb="([^"]+)"><\/inline-thumbnail>/g
-        let thumbLastIndex = 0
-        let thumbMatch
-
-        while ((thumbMatch = thumbRegex.exec(currentText)) !== null) {
-          if (thumbMatch.index > thumbLastIndex) {
-            thumbnailParts.push(currentText.slice(thumbLastIndex, thumbMatch.index))
-          }
-
-          thumbnailParts.push(
-            <div key={`thumb-${lineIndex}-${thumbMatch.index}`} className="inline-thumbnail-container" style={{ display: 'inline-block', margin: '2px', position: 'relative' }}>
-              <img
-                src={thumbMatch[2]}
-                alt="VFB Image"
-                className="vfb-thumbnail"
-                style={{ width: '60px', height: '60px', objectFit: 'cover', border: '1px solid #555', cursor: 'pointer', verticalAlign: 'middle' }}
-              />
-              <div className="thumbnail-hover" style={{
-                position: 'absolute',
-                top: '100%',
-                left: '0',
-                background: '#222',
-                border: '1px solid #555',
-                borderRadius: '4px',
-                padding: '5px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
-                zIndex: 1000,
-                display: 'none',
-                maxWidth: '300px'
-              }}>
-                <img src={thumbMatch[1]} alt="VFB Image" style={{ maxWidth: '100%', maxHeight: '200px' }} />
-              </div>
-            </div>
-          )
-
-          thumbLastIndex = thumbMatch.index + thumbMatch[0].length
-        }
-
-        if (thumbLastIndex < currentText.length) {
-          thumbnailParts.push(currentText.slice(thumbLastIndex))
-        }
-      } else if (currentText) {
-        thumbnailParts.push(currentText)
-      }
-
-      return [...parts, ...thumbnailParts]
-    })
-
-    // Flatten and add line breaks
-    const result = []
-    processedLines.forEach((lineParts, index) => {
-      result.push(...lineParts)
-      if (index < processedLines.length - 1) {
-        result.push(<br key={`br-${index}`} />)
-      }
-    })
-
-    return result.length > 0 ? result : text
   }
 
   useEffect(() => {
@@ -147,7 +42,6 @@ export default function Home() {
     if (initialQuery) {
       handleSend()
     } else {
-      // Add welcome message when no initial query
       setMessages([{
         role: 'assistant',
         content: `Welcome to VFB Chat! I'm here to help you explore Drosophila neuroanatomy and neuroscience using Virtual Fly Brain data.
@@ -173,26 +67,20 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
     setIsThinking(true)
     setThinkingMessage('Thinking')
 
-    const requestStart = Date.now()
-    console.log(`[Frontend] Sending chat request: "${input.substring(0, 50)}..."`)
-
     try {
-      // Call API with streaming
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: input, scene })
       })
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
       let currentEvent = ''
-      
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -207,25 +95,18 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
           } else if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6))
-              
+
               if (currentEvent === 'status') {
                 setThinkingMessage(data.message)
               } else if (currentEvent === 'reasoning') {
-                // Add intermediate reasoning message in smaller font
-                const reasoningMessage = { role: 'reasoning', content: data.text }
-                setMessages(prev => [...prev, reasoningMessage])
+                setMessages(prev => [...prev, { role: 'reasoning', content: data.text }])
               } else if (currentEvent === 'result') {
-                const botMessage = { role: 'assistant', content: data.response, images: data.images }
-                setMessages(prev => [...prev, botMessage])
+                setMessages(prev => [...prev, { role: 'assistant', content: data.response, images: data.images }])
                 if (data.newScene) setScene(data.newScene)
-                
-                const requestDuration = Date.now() - requestStart
-                console.log(`[Frontend] Response processed in ${requestDuration}ms: ${data.response.substring(0, 100)}... (${data.images?.length || 0} images)`)
                 setIsThinking(false)
                 return
               } else if (currentEvent === 'error') {
-                const errorMessage = { role: 'assistant', content: data.message }
-                setMessages(prev => [...prev, errorMessage])
+                setMessages(prev => [...prev, { role: 'assistant', content: data.message }])
                 setIsThinking(false)
                 return
               }
@@ -235,35 +116,10 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
           }
         }
       }
-
-      const requestDuration = Date.now() - requestStart
-      console.log(`[Frontend] Stream ended after ${requestDuration}ms`)
-
     } catch (error) {
-      const requestDuration = Date.now() - requestStart
-      console.log(`[Frontend] Request failed after ${requestDuration}ms: ${error.message}`)
-      
-      const errorMessage = { role: 'assistant', content: 'Sorry, there was an error processing your request. Please try again.' }
-      setMessages(prev => [...prev, errorMessage])
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, there was an error processing your request. Please try again.' }])
       setIsThinking(false)
     }
-  }
-
-  const formatMessage = (content) => {
-    // Replace VFB thumbnail URLs with interactive thumbnails
-    const thumbnailRegex = /https:\/\/www\.virtualflybrain\.org\/data\/VFB\/i\/[^/]+\/[^/]+\/thumbnail(?:T)?\.png/g
-    let formatted = content.replace(thumbnailRegex, (match) => {
-      const isTransparent = match.includes('thumbnailT.png')
-      const baseUrl = match.replace('/thumbnail.png', '').replace('/thumbnailT.png', '')
-      return `<div class="inline-thumbnail-container" style="display: inline-block; margin: 2px; position: relative;">
-        <img src="${match}" alt="VFB Image" class="vfb-thumbnail" style="width: 60px; height: 60px; object-fit: cover; border: 1px solid #555; cursor: pointer; vertical-align: middle;" />
-        <div class="thumbnail-hover" style="position: absolute; top: 100%; left: 0; background: #222; border: 1px solid #555; border-radius: 4px; padding: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); z-index: 1000; display: none; max-width: 300px;">
-          <img src="${baseUrl}/volume.nrrd" alt="VFB Image" style="max-width: 100%; max-height: 200px;" />
-        </div>
-      </div>`
-    })
-    // Convert newlines to HTML line breaks
-    return formatted.replace(/\n/g, '<br>')
   }
 
   const getDisplayName = (role) => {
@@ -273,103 +129,210 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
     return role
   }
 
+  // Custom renderers for react-markdown
+  const renderLink = ({ href, children }) => {
+    const isVfbId = href && !href.startsWith('http') && (href.startsWith('VFB') || href.startsWith('FBbt') || href.startsWith('FBrf'))
+    const url = isVfbId
+      ? `https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=${href}`
+      : href
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: '#66d9ff', textDecoration: 'underline', textDecorationColor: '#66d9ff40' }}
+        title={isVfbId ? 'View in VFB' : undefined}
+      >
+        {children}
+      </a>
+    )
+  }
+
+  const renderImage = ({ src, alt }) => {
+    const isThumbnail = src && src.includes('virtualflybrain.org/data/VFB')
+    return (
+      <span style={{ display: 'inline-block', margin: '4px', verticalAlign: 'middle' }}>
+        <img
+          src={src}
+          alt={alt || 'VFB Image'}
+          style={{
+            maxWidth: isThumbnail ? '80px' : '200px',
+            maxHeight: isThumbnail ? '80px' : '200px',
+            objectFit: 'cover',
+            border: '1px solid #444',
+            borderRadius: '4px',
+            verticalAlign: 'middle'
+          }}
+        />
+      </span>
+    )
+  }
+
+  const markdownComponents = {
+    a: renderLink,
+    img: renderImage,
+    p: ({ children }) => <p style={{ margin: '0.4em 0' }}>{children}</p>,
+    ul: ({ children }) => <ul style={{ margin: '0.4em 0', paddingLeft: '20px' }}>{children}</ul>,
+    ol: ({ children }) => <ol style={{ margin: '0.4em 0', paddingLeft: '20px' }}>{children}</ol>,
+    li: ({ children }) => <li style={{ margin: '0.2em 0' }}>{children}</li>,
+    strong: ({ children }) => <strong style={{ color: '#fff' }}>{children}</strong>,
+    h1: ({ children }) => <h3 style={{ color: '#fff', margin: '0.5em 0 0.3em' }}>{children}</h3>,
+    h2: ({ children }) => <h4 style={{ color: '#fff', margin: '0.5em 0 0.3em' }}>{children}</h4>,
+    h3: ({ children }) => <h5 style={{ color: '#fff', margin: '0.5em 0 0.3em' }}>{children}</h5>,
+    code: ({ children }) => <code style={{ backgroundColor: '#1a1a2e', padding: '2px 4px', borderRadius: '3px', fontSize: '0.9em' }}>{children}</code>,
+  }
+
   return (
-    <div style={{ backgroundColor: '#000', color: '#fff', minHeight: '100vh', padding: '20px' }}>
-      <h1 style={{ color: '#fff', marginBottom: '20px' }}>Virtual Fly Brain</h1>
-      <div style={{ border: '1px solid #333', height: '400px', overflowY: 'scroll', padding: 10, backgroundColor: '#111', borderRadius: '4px' }}>
+    <div style={{
+      backgroundColor: '#000',
+      color: '#e0e0e0',
+      height: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      padding: '12px 16px',
+      boxSizing: 'border-box',
+      overflow: 'hidden'
+    }}>
+      <h1 style={{
+        color: '#fff',
+        margin: '0 0 8px 0',
+        fontSize: '1.3em',
+        fontWeight: 600,
+        flexShrink: 0
+      }}>
+        Virtual Fly Brain
+      </h1>
+
+      {/* Chat messages area - fills available space */}
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        padding: '12px',
+        backgroundColor: '#0a0a0a',
+        border: '1px solid #222',
+        borderRadius: '8px',
+        minHeight: 0
+      }}>
         {messages.map((msg, idx) => (
-          <div key={idx} style={{ marginBottom: 10 }}>
-            <strong style={{ color: '#4a9eff' }}>{getDisplayName(msg.role)}:</strong> 
-            <span style={msg.role === 'reasoning' ? { fontSize: '0.85em', fontStyle: 'italic', color: '#ccc' } : {}}>
-              {renderTextWithLinks(msg.content)}
-            </span>
-            {msg.images && msg.images.map((img, i) => (
-              <div key={i} className="thumbnail-container" style={{ display: 'inline-block', margin: '5px', position: 'relative' }}>
-                <img 
-                  src={img.thumbnail} 
-                  alt={img.label} 
-                  className="vfb-thumbnail"
-                  style={{ width: '80px', height: '80px', objectFit: 'cover', border: '1px solid #555', cursor: 'pointer' }}
-                  title={img.label}
-                />
-                <div className="thumbnail-hover" style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: '0',
-                  background: '#222',
-                  border: '1px solid #555',
-                  borderRadius: '4px',
-                  padding: '5px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
-                  zIndex: 1000,
-                  display: 'none',
-                  maxWidth: '300px'
-                }}>
-                  <img 
-                    src={img.thumbnail.replace('thumbnail.png', 'volume.nrrd').replace('thumbnailT.png', 'volume.nrrd')} 
-                    alt={img.label} 
-                    style={{ maxWidth: '100%', maxHeight: '200px' }}
-                  />
-                  <div style={{ fontSize: '12px', marginTop: '5px', color: '#ccc' }}>{img.label}</div>
-                </div>
+          <div key={idx} style={{
+            marginBottom: '12px',
+            padding: '8px 12px',
+            backgroundColor: msg.role === 'user' ? '#1a1a2e' : 'transparent',
+            borderRadius: '6px',
+            borderLeft: msg.role === 'user' ? '3px solid #4a9eff' : '3px solid #2a6a3a'
+          }}>
+            <div style={{
+              fontSize: '0.75em',
+              fontWeight: 600,
+              color: msg.role === 'user' ? '#4a9eff' : '#4ade80',
+              marginBottom: '4px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
+            }}>
+              {getDisplayName(msg.role)}
+            </div>
+            <div
+              className="message-content"
+              style={msg.role === 'reasoning' ? { fontSize: '0.85em', fontStyle: 'italic', color: '#999' } : {}}
+            >
+              <ReactMarkdown components={markdownComponents}>
+                {msg.content}
+              </ReactMarkdown>
+            </div>
+            {/* Image gallery from API images field */}
+            {msg.images && msg.images.length > 0 && (
+              <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {msg.images.map((img, i) => (
+                  <div key={i} style={{ display: 'inline-block' }}>
+                    <img
+                      src={img.thumbnail}
+                      alt={img.label}
+                      style={{
+                        width: '80px',
+                        height: '80px',
+                        objectFit: 'cover',
+                        border: '1px solid #444',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                      title={img.label}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         ))}
         {isThinking && (
-          <div style={{ marginBottom: 10, fontSize: '0.9em', fontStyle: 'italic', color: '#888' }}>
+          <div style={{
+            marginBottom: '12px',
+            padding: '8px 12px',
+            fontSize: '0.9em',
+            fontStyle: 'italic',
+            color: '#666',
+            borderLeft: '3px solid #333',
+            borderRadius: '6px'
+          }}>
             {thinkingMessage}{thinkingDots}
           </div>
         )}
+        <div ref={chatEndRef} />
       </div>
-      <div style={{ marginTop: '10px' }}>
+
+      {/* Input area */}
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+        marginTop: '8px',
+        flexShrink: 0
+      }}>
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyPress={e => e.key === 'Enter' && handleSend()}
-          style={{ 
-            width: '80%', 
-            padding: '8px', 
-            backgroundColor: '#222', 
-            color: '#fff', 
-            border: '1px solid #555', 
-            borderRadius: '4px',
-            fontSize: '14px'
+          placeholder="Ask about Drosophila neuroanatomy..."
+          style={{
+            flex: 1,
+            padding: '10px 14px',
+            backgroundColor: '#111',
+            color: '#fff',
+            border: '1px solid #333',
+            borderRadius: '6px',
+            fontSize: '14px',
+            outline: 'none'
           }}
         />
-        <button 
+        <button
           onClick={handleSend}
+          disabled={isThinking}
           style={{
-            padding: '8px 16px',
-            marginLeft: '10px',
-            backgroundColor: '#4a9eff',
+            padding: '10px 20px',
+            backgroundColor: isThinking ? '#333' : '#4a9eff',
             color: '#fff',
             border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '14px'
+            borderRadius: '6px',
+            cursor: isThinking ? 'not-allowed' : 'pointer',
+            fontSize: '14px',
+            fontWeight: 600
           }}
         >
           Send
         </button>
       </div>
+
+      {/* VFB Browser link */}
       {scene.id && (
-        <div style={{ marginTop: '10px' }}>
-          <a 
-            href={createVFBUrl(scene)} 
+        <div style={{ marginTop: '6px', flexShrink: 0 }}>
+          <a
+            href={createVFBUrl(scene)}
             target="_blank"
-            style={{ color: '#4a9eff', textDecoration: 'none' }}
+            rel="noopener noreferrer"
+            style={{ color: '#66d9ff', textDecoration: 'none', fontSize: '0.85em' }}
           >
-            Open in VFB 3D Browser
+            Open in VFB 3D Browser &rarr;
           </a>
         </div>
       )}
-      <style jsx>{`
-        .thumbnail-container:hover .thumbnail-hover,
-        .inline-thumbnail-container:hover .thumbnail-hover {
-          display: block !important;
-        }
-      `}</style>
     </div>
   )
 }
