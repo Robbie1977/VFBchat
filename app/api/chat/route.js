@@ -208,27 +208,100 @@ async function getLookupCache(mcpClient) {
     log('Failed to load cache file', { error: error.message })
   }
 
-  // Fetch fresh lookup data from MCP
+  // Fetch comprehensive lookup data from VFB (following VFB_connect approach)
   try {
-    log('Fetching fresh lookup data from MCP...')
-    // Note: This assumes there's an MCP tool to get the complete lookup table
-    // For now, we'll build it incrementally from search results
+    log('Fetching comprehensive lookup data from VFB...')
+
+    // Initialize empty caches
     lookupCache = {}
     reverseLookupCache = {}
     normalizedLookupCache = {}
 
-    // Seed with common VFB terms
-    seedLookupCache()
+    // Get comprehensive lookup from VFB database via MCP
+    await loadVfbLookupTable(mcpClient)
 
-    // Save cache to start
+    // If we got minimal data, seed with essential terms as fallback
+    if (Object.keys(lookupCache).length < 100) {
+      log('Limited lookup data received, adding essential seed terms')
+      seedEssentialTerms()
+    }
+
+    // Save cache
     saveLookupCache()
-    log('Initialized lookup cache with seeded terms', { entries: Object.keys(lookupCache).length })
+    log('Initialized lookup cache', { entries: Object.keys(lookupCache).length })
     return lookupCache
   } catch (error) {
-    log('Failed to fetch lookup data', { error: error.message })
+    log('Failed to fetch lookup data, using essential seed terms only', { error: error.message })
+
+    // Fallback: initialize with essential terms only
     lookupCache = {}
+    reverseLookupCache = {}
+    normalizedLookupCache = {}
+    seedEssentialTerms()
+    saveLookupCache()
     return lookupCache
   }
+}
+
+// Load comprehensive lookup table from VFB (following VFB_connect approach)
+async function loadVfbLookupTable(mcpClient) {
+  try {
+    // Use MCP to get a comprehensive lookup table from VFB
+    // This simulates what VFB_connect does with Neo4jConnect.get_lookup()
+    const toolResult = await mcpClient.callTool({
+      name: 'mcp_virtual-fly-b_search_terms',
+      arguments: {
+        query: 'medulla OR protocerebrum OR mushroom OR central OR brain',  // Search for key anatomical terms
+        rows: 1000  // Get substantial data
+      }
+    })
+
+    if (toolResult?.content?.[0]?.text) {
+      const parsedResult = JSON.parse(toolResult.content[0].text)
+
+      if (parsedResult?.response?.docs) {
+        let addedCount = 0
+        for (const doc of parsedResult.response.docs) {
+          if (doc.label && doc.short_form) {
+            addToLookupCache(doc.label, doc.short_form)
+            addedCount++
+
+            // Also add synonyms if available
+            if (doc.synonym && Array.isArray(doc.synonym)) {
+              for (const syn of doc.synonym) {
+                if (syn && typeof syn === 'string') {
+                  addToLookupCache(syn, doc.short_form)
+                  addedCount++
+                }
+              }
+            }
+          }
+        }
+        log('Loaded comprehensive lookup from VFB', { termsAdded: addedCount })
+      }
+    }
+  } catch (error) {
+    log('Failed to load comprehensive lookup, will use incremental approach', { error: error.message })
+  }
+}
+
+// Seed with only essential, verified terms (much smaller set than before)
+function seedEssentialTerms() {
+  const essentialTerms = {
+    'medulla': 'FBbt_00003748',
+    'adult brain': 'FBbt_00003624',
+    'central complex': 'FBbt_00003632',
+    'mushroom body': 'FBbt_00005801',
+    'protocerebrum': 'FBbt_00003627',
+    'deutocerebrum': 'FBbt_00003923',
+    'tritocerebrum': 'FBbt_00003633'
+  }
+
+  Object.entries(essentialTerms).forEach(([term, id]) => {
+    addToLookupCache(term, id)
+  })
+
+  log('Seeded lookup cache with essential verified terms', { count: Object.keys(essentialTerms).length })
 }
 
 // Save lookup cache to file
@@ -265,14 +338,38 @@ function addToLookupCache(label, id) {
   }
 }
 
-// Normalize key for fuzzy matching (similar to VFB_connect)
+// Normalize key for fuzzy matching (VFB_connect style with prefix substitutions)
 function normalizeKey(key) {
-  return key.toLowerCase()
+  let normalized = key.toLowerCase()
     .replace(/_/g, '')
     .replace(/-/g, '')
     .replace(/\s+/g, '')
     .replace(/:/g, '')
     .replace(/;/g, '')
+
+  // VFB_connect style prefix substitutions for developmental stages
+  const prefixSubs = [
+    ['adult', ''],
+    ['larval', ''],
+    ['pupal', ''],
+    ['embryonic', ''],
+    ['larva', ''],
+    ['pupa', ''],
+    ['embryo', '']
+  ]
+
+  // Apply prefix substitutions
+  for (const [prefix, replacement] of prefixSubs) {
+    if (normalized.startsWith(prefix)) {
+      const withoutPrefix = normalized.substring(prefix.length)
+      if (withoutPrefix.length > 2) { // Avoid too short terms
+        normalized = withoutPrefix
+        break // Only apply first matching prefix
+      }
+    }
+  }
+
+  return normalized
 }
 
 // Replace VFB terms in text with markdown links
@@ -423,33 +520,11 @@ async function summarizeTermInfo(termInfoText) {
 
 // Initialize cache with common VFB terms
 function seedLookupCache() {
-  const commonTerms = {
-    'medulla': 'FBbt_00003748',
-    'adult brain': 'FBbt_00003624',
-    'antennal lobe': 'FBbt_00007484',
-    'optic lobe': 'FBbt_00003625',
-    'central complex': 'FBbt_00003629',
-    'mushroom body': 'FBbt_00003630',
-    'protocerebrum': 'FBbt_00003631',
-    'deutocerebrum': 'FBbt_00003632',
-    'tritocerebrum': 'FBbt_00003633',
-    'Kenyon cell': 'FBbt_00003634',
-    'olfactory receptor neuron': 'FBbt_00007485',
-    'photoreceptor cell': 'FBbt_00003636',
-    'visual system': 'FBbt_00003637',
-    'motor neuron': 'FBbt_00003638',
-    'sensory neuron': 'FBbt_00003639',
-    'glial cell': 'FBbt_00003640'
-  }
-
-  Object.entries(commonTerms).forEach(([term, id]) => {
-    addToLookupCache(term, id)
-  })
-
-  log('Seeded lookup cache with common VFB terms', { count: Object.keys(commonTerms).length })
+  // This function is now deprecated - use seedEssentialTerms instead
+  seedEssentialTerms()
 }
 
-// Local term resolution (fast lookup)
+// Local term resolution (fast lookup with VFB_connect style fuzzy matching)
 function resolveTermLocally(term) {
   if (!lookupCache) return null
 
@@ -469,12 +544,27 @@ function resolveTermLocally(term) {
     return normalizedLookupCache[normalized]
   }
 
-  // Partial matches
-  const partialMatches = Object.keys(lookupCache).filter(key =>
-    key.toLowerCase().includes(term.toLowerCase())
-  )
+  // Try with developmental prefixes removed (VFB_connect style)
+  const prefixes = ['adult ', 'larval ', 'pupal ', 'embryonic ', 'larva ', 'pupa ', 'embryo ']
+  for (const prefix of prefixes) {
+    if (term.toLowerCase().startsWith(prefix)) {
+      const withoutPrefix = term.substring(prefix.length).trim()
+      if (lookupCache[withoutPrefix]) {
+        return lookupCache[withoutPrefix]
+      }
+      const normalizedWithoutPrefix = normalizeKey(withoutPrefix)
+      if (normalizedLookupCache[normalizedWithoutPrefix]) {
+        return normalizedLookupCache[normalizedWithoutPrefix]
+      }
+    }
+  }
 
-  if (partialMatches.length === 1) {
+  // Partial matches (longest first)
+  const partialMatches = Object.keys(lookupCache)
+    .filter(key => key.toLowerCase().includes(term.toLowerCase()))
+    .sort((a, b) => b.length - a.length)
+
+  if (partialMatches.length > 0) {
     return lookupCache[partialMatches[0]]
   }
 
