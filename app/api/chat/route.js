@@ -19,16 +19,20 @@ function log(message, data = {}) {
 function trackQuery(query, responseLength, duration, sessionId) {
   if (!GA_ENABLED) return
   
+  // Truncate query for privacy and to avoid GA limits (500 char limit per parameter)
+  const truncatedQuery = query.length > 200 ? query.substring(0, 200) + '...' : query
+  
   const payload = {
     client_id: sessionId || 'anonymous',
     events: [{
       name: 'chat_query',
       params: {
-        query_length: query.length,
-        response_length: responseLength,
-        duration_ms: duration,
-        session_id: sessionId,
-        timestamp: new Date().toISOString()
+        query_text: truncatedQuery,      // The actual query text (truncated)
+        query_length: query.length,      // Original query length
+        response_length: responseLength, // Length of the AI response
+        duration_ms: duration,           // Processing time in milliseconds
+        session_id: sessionId,           // Session identifier
+        timestamp: new Date().toISOString() // ISO timestamp of the event
       }
     }]
   }

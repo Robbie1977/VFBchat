@@ -32,6 +32,18 @@ The VFB Chat client includes Google Analytics integration to monitor usage patte
 - Quality control and improvement of responses
 - Research into user interaction patterns with neuroscience data
 
+**Data Collected:**
+- Query text (truncated to 200 characters for privacy)
+- Query and response lengths
+- Processing duration
+- Session identifiers (anonymous)
+- Timestamps
+
+**Privacy Protection:**
+- Query text is truncated to prevent storage of long or sensitive content
+- No personally identifiable information is collected
+- Analytics data is used solely for quality control and system improvement
+
 ### Important AI Usage Guidelines
 **Please verify all information provided by the AI assistant:**
 - AI-generated responses may contain inaccuracies or outdated information

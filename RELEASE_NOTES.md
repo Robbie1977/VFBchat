@@ -4,7 +4,7 @@ This release adds comprehensive usage monitoring and responsible AI usage guidel
 
 Changes:
 - Implemented Google Analytics tracking for user queries and AI responses
-- Added tracking of query length, response length, and processing duration
+- Added tracking of query text (truncated), query length, response length, and processing duration
 - Integrated axios for GA4 API communication
 - Updated welcome message with AI usage guidelines and warnings
 - Added comprehensive documentation about responsible AI use
