@@ -771,7 +771,7 @@ CITATIONS:
 - Do not reference "common Drosophila neuroscience papers" unless they appear in the actual VFB data for the specific entity being discussed
 
 TOOLS:
-- search_terms(query, filter_types, exclude_types, boost_types, start, rows): Search VFB terms with filters like ["neuron","adult","has_image"] for adult neurons, ["anatomy"] for brain regions, ["gene"] for genes. Always exclude ["deprecated"].
+- search_terms(query, filter_types, exclude_types, boost_types, start, rows): Search VFB terms with filters like ["dataset"] for datasets, ["neuron","adult","has_image"] for adult neurons, ["anatomy"] for brain regions, ["gene"] for genes. Always exclude ["deprecated"].
 - get_term_info(id): Get detailed info about a VFB entity by ID
 - run_query(id, query_type): Run analyses like PaintedDomains, NBLAST, Connectivity. IMPORTANT: Only use query_type values that are returned in the Queries array from get_term_info for the given id. Do not guess or invent query types. For connectivity, individual neurons from connectomes often have "NeuronNeuronConnectivityQuery" available.
 
@@ -921,6 +921,41 @@ Do NOT show any images if no validated thumbnail URLs are available in the data.
                     callArgs = { ...callArgs }
                     if (callArgs.rows === undefined) callArgs.rows = 10
                     if (callArgs.start === undefined) callArgs.start = 0
+                    
+                    // Fix case sensitivity for filter_types - VFB uses capitalized facet names
+                    if (callArgs.filter_types && Array.isArray(callArgs.filter_types)) {
+                      callArgs.filter_types = callArgs.filter_types.map(type => {
+                        const lowerType = type.toLowerCase()
+                        // Map common lowercase filters to proper capitalized VFB facets
+                        const facetMap = {
+                          'dataset': 'DataSet',
+                          'neuron': 'Neuron',
+                          'anatomy': 'Anatomy',
+                          'gene': 'Gene',
+                          'adult': 'Adult',
+                          'has_image': 'has_image',
+                          'deprecated': 'Deprecated'
+                        }
+                        return facetMap[lowerType] || type
+                      })
+                    }
+                    
+                    // Also fix exclude_types
+                    if (callArgs.exclude_types && Array.isArray(callArgs.exclude_types)) {
+                      callArgs.exclude_types = callArgs.exclude_types.map(type => {
+                        const lowerType = type.toLowerCase()
+                        const facetMap = {
+                          'dataset': 'DataSet',
+                          'neuron': 'Neuron',
+                          'anatomy': 'Anatomy',
+                          'gene': 'Gene',
+                          'adult': 'Adult',
+                          'has_image': 'has_image',
+                          'deprecated': 'Deprecated'
+                        }
+                        return facetMap[lowerType] || type
+                      })
+                    }
                   }
 
                   // Use MCP client to call the tool
@@ -948,6 +983,27 @@ Do NOT show any images if no validated thumbnail URLs are available in the data.
                   if (toolCall.function.name === 'search_terms' && toolResult?.content?.[0]?.text) {
                     try {
                       const parsedResult = JSON.parse(toolResult.content[0].text)
+                      
+                      // Filter results based on filter_types if specified
+                      if (parsedResult?.response?.docs && callArgs?.filter_types?.length > 0) {
+                        const filterTypes = callArgs.filter_types
+                        parsedResult.response.docs = parsedResult.response.docs.filter(doc => {
+                          if (!doc.facets_annotation || !Array.isArray(doc.facets_annotation)) {
+                            return false
+                          }
+                          // Check if the doc has any of the required filter types
+                          return filterTypes.some(filterType => 
+                            doc.facets_annotation.includes(filterType)
+                          )
+                        })
+                        // Update numFound to reflect filtered count
+                        parsedResult.response.numFound = parsedResult.response.docs.length
+                        log('Filtered search results by facets', { 
+                          filterTypes, 
+                          originalCount: parsedResult.response.numFound,
+                          filteredCount: parsedResult.response.docs.length 
+                        })
+                      }
                       
                       // POPULATE CACHE: Add label->ID mappings from search results
                       if (parsedResult?.response?.docs) {

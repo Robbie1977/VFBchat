@@ -1,3 +1,14 @@
+Release 2.2.17
+
+This release fixes dataset search filtering to properly return only actual datasets instead of unrelated items like individual neurons or interfaces.
+
+Changes:
+- Fixed case sensitivity issue in VFB search filters (corrected "dataset" to "DataSet" to match VFB facet naming)
+- Added client-side filtering as safety net to ensure only items with required facets are returned
+- Updated search_terms tool description to include dataset filtering examples, guiding LLM to use proper filters
+- Dataset searches now correctly exclude non-dataset items, returning only actual datasets like "FlyWire connectome neurons"
+- Improved search accuracy for dataset queries, preventing confusion between datasets and individual data items
+
 Release 2.2.16
 
 This release fixes a critical runtime error that was preventing the chat API from functioning, ensuring the application works properly after the pre-fetching refactoring.
