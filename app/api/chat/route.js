@@ -624,13 +624,15 @@ CITATIONS:
 TOOLS:
 - search_terms(query, filter_types, exclude_types, boost_types, start, rows): Search VFB terms with filters like ["neuron","adult","has_image"] for adult neurons, ["anatomy"] for brain regions, ["gene"] for genes. Always exclude ["deprecated"].
 - get_term_info(id): Get detailed info about a VFB entity by ID
-- run_query(id, query_type): Run analyses like PaintedDomains, NBLAST, Connectivity
+- run_query(id, query_type): Run analyses like PaintedDomains, NBLAST, Connectivity. IMPORTANT: Only use query_type values that are returned in the Queries array from get_term_info for the given id. Do not guess or invent query types.
 
 STRATEGY:
 1. For anatomy/neurons: search_terms with specific filters → get_term_info → run relevant queries
 2. Handle pagination if _truncation.canRequestMore=true
 3. Use pre-fetched term info when available (avoid redundant get_term_info calls)
-4. Construct VFB URLs: https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=<id>&i=<template_id>,<image_ids>
+4. When displaying multiple neurons or creating scene links, use the IDs directly from search results without calling get_term_info unless you need additional metadata like descriptions or images
+5. ALWAYS call get_term_info before using run_query to see what query types are available for that entity. Only use query types that appear in the Queries array returned by get_term_info.
+6. Construct VFB URLs: https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=<id>&i=<template_id>,<image_ids>
 
 DISPLAYING IMAGES:
 ONLY show thumbnail images when they are actually available in the VFB data. NEVER make up or invent thumbnail URLs.
@@ -793,7 +795,9 @@ Use full markdown in your responses: **bold** for term names, bullet lists for m
                 const toolStart = Date.now()
                 log('Executing tool call', { 
                   name: toolCall.function.name, 
-                  args: JSON.stringify(toolCall.function.arguments).substring(0, 200) 
+                  args: toolCall.function.name === 'get_term_info' && parsedArgs?.id ? 
+                    `pulling info on ${parsedArgs.id}` : 
+                    JSON.stringify(toolCall.function.arguments).substring(0, 200) 
                 })
                 
                 try {
