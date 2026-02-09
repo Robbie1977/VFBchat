@@ -424,7 +424,9 @@ function resolveTermLocally(term) {
 
 export async function POST(request) {
   const startTime = Date.now()
-  const { message, scene } = await request.json()
+  const { messages, scene } = await request.json()
+  
+  const message = messages[messages.length - 1].content // Last message is the current user input
   
   log('Chat API request received', { message: message.substring(0, 100), scene })
 
@@ -657,11 +659,12 @@ Use ONLY the actual thumbnail URLs from get_term_info responses. When pre-fetche
 FORMATTING:
 Use full markdown in your responses: **bold** for term names, bullet lists for multiple results, [text](id) for VFB term links, ![alt](url) for images, and [citation](url) for paper references. Be concise, scientific, and suggest 3D visualisations when relevant.`
 
-        // Initial messages
+        // Initial messages - prepend system prompt to conversation history
         const resolvedUserMessage = replaceTermsWithLinks(message)
-        const messages = [
+        const conversationMessages = [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: resolvedUserMessage }
+          ...messages.slice(0, -1).map(msg => ({ role: msg.role, content: msg.content })), // Previous messages
+          { role: 'user', content: resolvedUserMessage } // Current user message
         ]
 
         // Pre-fetch term info for any resolved terms to speed up responses
@@ -689,7 +692,7 @@ Use full markdown in your responses: **bold** for term names, bullet lists for m
               `Pre-fetched info for ${info.id}:\n${summarizeTermInfo(info.result)}`
             ).join('\n\n')
             
-            messages.splice(1, 0, { 
+            conversationMessages.splice(1, 0, { 
               role: 'system', 
               content: `Pre-fetched term info:\n${termInfoContext}\n\nUse this data - avoid redundant get_term_info calls.` 
             })
@@ -713,14 +716,14 @@ Use full markdown in your responses: **bold** for term names, bullet lists for m
           const apiStart = Date.now()
 
           // Set up timeout (shorter for cloud API)
-          const hasToolResults = messages.some(msg => msg.role === 'tool')
+          const hasToolResults = conversationMessages.some(msg => msg.role === 'tool')
           const timeoutMs = hasToolResults ? 120000 : 60000 // 2 min with tool results, 1 min without
           const abortController = new AbortController()
           const timeoutId = setTimeout(() => abortController.abort(), timeoutMs)
 
           log('Calling LLM API', {
             iteration: iteration + 1,
-            messageCount: messages.length,
+            messageCount: conversationMessages.length,
             model: apiModel,
             timeoutMs,
             hasToolResults
@@ -734,7 +737,7 @@ Use full markdown in your responses: **bold** for term names, bullet lists for m
             },
             body: JSON.stringify({
               model: apiModel,
-              messages: messages,
+              messages: conversationMessages,
               tools: tools,
               stream: false
             }),
@@ -772,7 +775,7 @@ Use full markdown in your responses: **bold** for term names, bullet lists for m
           // The LLM now has full data and system prompt instructions to create its own markdown links.
           // Running replacement on LLM output caused nested link corruption.
 
-          messages.push(assistantMessage)
+          conversationMessages.push(assistantMessage)
 
           // Check for tool calls
           if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
@@ -981,7 +984,7 @@ Use full markdown in your responses: **bold** for term names, bullet lists for m
                   const toolContent = JSON.stringify(toolResult)
 
                   // Add tool result to conversation
-                  messages.push({
+                  conversationMessages.push({
                     role: 'tool',
                     content: toolContent,
                     tool_call_id: toolCall.id
@@ -998,7 +1001,7 @@ Use full markdown in your responses: **bold** for term names, bullet lists for m
                   // Update status when MCP call fails
                   sendEvent('status', { message: 'MCP service unavailable, using knowledge base', phase: 'fallback' })
                   
-                  messages.push({
+                  conversationMessages.push({
                     role: 'tool',
                     content: `Error executing ${toolCall.function.name}: ${toolError.message}`,
                     tool_call_id: toolCall.id
@@ -1037,7 +1040,7 @@ Use full markdown in your responses: **bold** for term names, bullet lists for m
             },
             body: JSON.stringify({
               model: fallbackModel,
-              messages: messages,
+              messages: conversationMessages,
               stream: false
             }),
             signal: fallbackController.signal

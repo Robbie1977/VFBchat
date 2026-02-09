@@ -77,7 +77,7 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input, scene })
+        body: JSON.stringify({ messages: [...messages, userMessage], scene })
       })
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
