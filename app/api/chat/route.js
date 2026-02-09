@@ -9,6 +9,14 @@ function log(message, data = {}) {
   console.log(`[${timestamp}] ${message}`, Object.keys(data).length ? data : '')
 }
 
+// Parse tool arguments - OpenAI returns JSON string, Ollama returns object
+function parseToolArguments(args) {
+  if (typeof args === 'string') {
+    try { return JSON.parse(args) } catch { return {} }
+  }
+  return args || {}
+}
+
 // Global lookup cache (persists across requests)
 let lookupCache = null
 let reverseLookupCache = null
@@ -235,6 +243,10 @@ export async function POST(request) {
   
   log('Chat API request received', { message: message.substring(0, 100), scene })
 
+  if (!process.env.OPENAI_API_KEY) {
+    log('WARNING: OPENAI_API_KEY not set - API calls may fail')
+  }
+
   // Create a streaming response
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
@@ -416,80 +428,59 @@ Be concise, scientific, and suggest 3D visualizations when relevant.`
         for (let iteration = 0; iteration < maxIterations; iteration++) {
           log(`Starting iteration ${iteration + 1}/${maxIterations}`)
           
-          // Call Ollama with tool calling
-          const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
-          const ollamaStart = Date.now()
-          log('Calling Ollama API', { iteration: iteration + 1, messageCount: messages.length })
-          
-          // Set up timeout for Ollama calls (longer for iterations with tool results)
+          // Call OpenAI-compatible API
+          const apiBaseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
+          const apiKey = process.env.OPENAI_API_KEY
+          const apiModel = process.env.OPENAI_MODEL || 'gpt-4o-mini'
+          const apiStart = Date.now()
+
+          // Set up timeout (shorter for cloud API)
           const hasToolResults = messages.some(msg => msg.role === 'tool')
-          const timeoutMs = hasToolResults ? 600000 : 300000 // 10 minutes with tool results, 5 minutes without
-          const controller = new AbortController()
-          const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-          
-          log('Calling Ollama API', { 
-            iteration: iteration + 1, 
+          const timeoutMs = hasToolResults ? 120000 : 60000 // 2 min with tool results, 1 min without
+          const abortController = new AbortController()
+          const timeoutId = setTimeout(() => abortController.abort(), timeoutMs)
+
+          log('Calling LLM API', {
+            iteration: iteration + 1,
             messageCount: messages.length,
+            model: apiModel,
             timeoutMs,
             hasToolResults
           })
-          
-          // DEBUG: Log messages being sent to Ollama
-          console.log('🔍 MESSAGES TO OLLAMA:')
-          messages.forEach((msg, i) => {
-            console.log(`🔍 Message ${i} (${msg.role}):`, msg.content ? msg.content.substring(0, 200) + (msg.content.length > 200 ? '...' : '') : 'no content')
-            if (msg.role === 'tool') {
-              console.log(`🔍 Tool result size: ${msg.content.length} chars`)
-            }
-          })
-          
-          const ollamaResponse = await fetch(`${ollamaUrl}/api/chat`, {
+
+          const apiResponse = await fetch(`${apiBaseUrl}/chat/completions`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {})
+            },
             body: JSON.stringify({
-              model: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
+              model: apiModel,
               messages: messages,
               tools: tools,
               stream: false
             }),
-            signal: controller.signal
+            signal: abortController.signal
           })
-          
+
           clearTimeout(timeoutId)
 
-          // Check for timeout
-          if (ollamaResponse.status === undefined) {
-            const timeoutMinutes = timeoutMs / 60000
-            log('Ollama API timeout')
-            sendEvent('error', { message: `Error: Ollama API request timed out (${timeoutMinutes} minutes)` })
+          const apiDuration = Date.now() - apiStart
+          log('LLM API response received', { duration: `${apiDuration}ms`, status: apiResponse.status })
+
+          if (!apiResponse.ok) {
+            const errorText = await apiResponse.text()
+            log('LLM API error', { error: errorText })
+            sendEvent('error', { message: `Error: LLM API error - ${errorText}` })
             controller.close()
             return
           }
 
-          const ollamaDuration = Date.now() - ollamaStart
-          log('Ollama API response received', { duration: `${ollamaDuration}ms`, status: ollamaResponse.status })
-
-          if (!ollamaResponse.ok) {
-            const errorText = await ollamaResponse.text()
-            log('Ollama API error', { error: errorText })
-            sendEvent('error', { message: `Error: Ollama API error - ${errorText}` })
-            controller.close()
-            return
-          }
-
-          const ollamaData = await ollamaResponse.json()
-          const assistantMessage = ollamaData.message
-
-          // DEBUG: Log Ollama response
-          console.log('🔍 OLLAMA RESPONSE:', {
-            hasContent: !!assistantMessage?.content,
-            contentLength: assistantMessage?.content?.length || 0,
-            toolCallsCount: assistantMessage?.tool_calls?.length || 0,
-            contentPreview: assistantMessage?.content?.substring(0, 200) + (assistantMessage?.content?.length > 200 ? '...' : '') || 'no content'
-          })
+          const apiData = await apiResponse.json()
+          const assistantMessage = apiData.choices?.[0]?.message
 
           if (!assistantMessage) {
-            log('No assistant message in Ollama response')
+            log('No assistant message in LLM response')
             break
           }
 
@@ -535,21 +526,24 @@ Be concise, scientific, and suggest 3D visualizations when relevant.`
                 try {
                   let toolResult = null
 
+                  // Parse tool arguments (OpenAI returns JSON string, Ollama returned object)
+                  const parsedArgs = parseToolArguments(toolCall.function.arguments)
+
                   // FAST LOCAL TERM RESOLUTION: Try local cache first for get_term_info
-                  if (toolCall.function.name === 'get_term_info' && toolCall.function.arguments?.id) {
-                    const localId = resolveTermLocally(toolCall.function.arguments.id)
-                    if (localId && localId !== toolCall.function.arguments.id) {
-                      log('Local term resolution', { 
-                        input: toolCall.function.arguments.id, 
-                        resolved: localId 
+                  if (toolCall.function.name === 'get_term_info' && parsedArgs?.id) {
+                    const localId = resolveTermLocally(parsedArgs.id)
+                    if (localId && localId !== parsedArgs.id) {
+                      log('Local term resolution', {
+                        input: parsedArgs.id,
+                        resolved: localId
                       })
                       // Update the arguments with resolved ID
-                      toolCall.function.arguments.id = localId
+                      parsedArgs.id = localId
                     }
                   }
 
                   // Modify arguments for search_terms to limit results
-                  let callArgs = toolCall.function.arguments
+                  let callArgs = parsedArgs
                   if (toolCall.function.name === 'search_terms') {
                     callArgs = { ...callArgs }
                     if (callArgs.rows === undefined) callArgs.rows = 10
@@ -601,11 +595,11 @@ Be concise, scientific, and suggest 3D visualizations when relevant.`
                       }
                       
                       if (parsedResult?.response?.docs) {
-                        const query = toolCall.function.arguments?.query?.toLowerCase() || ''
+                        const query = parsedArgs?.query?.toLowerCase() || ''
                         const originalCount = parsedResult.response.numFound
-                        
-                        const start = toolCall.function.arguments?.start || 0
-                        const rows = toolCall.function.arguments?.rows || 10
+
+                        const start = parsedArgs?.start || 0
+                        const rows = parsedArgs?.rows || 10
                         const isPaginatedRequest = start > 0 || (rows && rows !== 10)
                         
                         // Check for exact label match first (only for initial searches)
@@ -714,9 +708,19 @@ Be concise, scientific, and suggest 3D visualizations when relevant.`
                     }
                   }
 
-                  // DEBUG: Log what content will be sent to LLM
-                  const toolContent = JSON.stringify(toolResult)
-                  console.log('🔍 TOOL CONTENT TO LLM:', toolContent.substring(0, 500) + (toolContent.length > 500 ? '...' : ''))
+                  // Summarize get_term_info results to avoid exceeding context limits
+                  let toolContent
+                  if (toolCall.function.name === 'get_term_info' && toolResult?.content?.[0]?.text) {
+                    toolContent = summarizeTermInfo(toolResult.content[0].text)
+                  } else {
+                    toolContent = JSON.stringify(toolResult)
+                  }
+
+                  // Cap tool content size to avoid context length issues
+                  if (toolContent.length > 8000) {
+                    toolContent = toolContent.substring(0, 8000) + '... [truncated]'
+                    log('Tool content truncated', { name: toolCall.function.name, originalLength: toolContent.length })
+                  }
 
                   // Add tool result to conversation
                   messages.push({
@@ -758,39 +762,37 @@ Be concise, scientific, and suggest 3D visualizations when relevant.`
         if (!finalResponse) {
           log('No final response after max iterations, making fallback call')
           sendEvent('status', { message: 'Generating final response', phase: 'fallback' })
-          const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
+          const fallbackBaseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
+          const fallbackApiKey = process.env.OPENAI_API_KEY
+          const fallbackModel = process.env.OPENAI_MODEL || 'gpt-4o-mini'
           const fallbackStart = Date.now()
-          
-          // Set up timeout for fallback Ollama call (longer since it includes tool results)
+
+          // Set up timeout for fallback call
           const fallbackController = new AbortController()
-          const fallbackTimeoutMs = 600000 // 10 minutes for fallback (includes tool results)
+          const fallbackTimeoutMs = 120000 // 2 minutes
           const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), fallbackTimeoutMs)
-          
-          const finalOllamaResponse = await fetch(`${ollamaUrl}/api/chat`, {
+
+          const finalApiResponse = await fetch(`${fallbackBaseUrl}/chat/completions`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(fallbackApiKey ? { 'Authorization': `Bearer ${fallbackApiKey}` } : {})
+            },
             body: JSON.stringify({
-              model: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
+              model: fallbackModel,
               messages: messages,
               stream: false
             }),
             signal: fallbackController.signal
           })
-          
-          clearTimeout(fallbackTimeoutId)
-          // Check for timeout
-          if (fallbackResponse.status === undefined) {
-            log('Fallback Ollama API timeout')
-            sendEvent('error', { message: 'Error: Fallback Ollama API request timed out (10 minutes)' })
-            controller.close()
-            return
-          }
-          const fallbackDuration = Date.now() - fallbackStart
-          log('Fallback Ollama call completed', { duration: `${fallbackDuration}ms`, status: finalOllamaResponse.status })
 
-          if (finalOllamaResponse.ok) {
-            const finalData = await finalOllamaResponse.json()
-            finalResponse = finalData.message?.content || 'I apologize, but I was unable to generate a complete response. Please try rephrasing your question.'
+          clearTimeout(fallbackTimeoutId)
+          const fallbackDuration = Date.now() - fallbackStart
+          log('Fallback LLM call completed', { duration: `${fallbackDuration}ms`, status: finalApiResponse.status })
+
+          if (finalApiResponse.ok) {
+            const finalData = await finalApiResponse.json()
+            finalResponse = finalData.choices?.[0]?.message?.content || 'I apologize, but I was unable to generate a complete response. Please try rephrasing your question.'
             // Replace VFB terms with markdown links in fallback response
             finalResponse = replaceTermsWithLinks(finalResponse)
             log('Fallback response generated', { length: finalResponse.length })

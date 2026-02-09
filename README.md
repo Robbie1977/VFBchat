@@ -1,6 +1,6 @@
 # VFB Chat Client
 
-A web-based chat client for exploring Virtual Fly Brain (VFB) data and Drosophila neuroscience using a guardrailed LLM with tool calling, connected to the VFB MCP server via Ollama.
+A web-based chat client for exploring Virtual Fly Brain (VFB) data and Drosophila neuroscience using a guardrailed LLM with tool calling, connected to the VFB MCP server via the OpenAI API.
 
 ## Features
 
@@ -17,21 +17,25 @@ A web-based chat client for exploring Virtual Fly Brain (VFB) data and Drosophil
 
 2. Clone this repository.
 
-3. Run `docker-compose up --build` to start the services. The default model (`qwen2.5:7b`) will be automatically pulled on first startup.
+3. Set your OpenAI API key: `export OPENAI_API_KEY=your-key-here`
 
-4. To use a different model, set the `OLLAMA_MODEL` environment variable: `OLLAMA_MODEL=llama3.1:8b docker-compose up --build`. The model must support Ollama tool calling.
+4. Run `docker-compose up --build` to start the app.
+
+5. To use a different model, set the `OPENAI_MODEL` environment variable: `OPENAI_MODEL=gpt-4o docker-compose up --build`
 
 ## Deployment
 
 ### Local Development
-Follow the Setup steps above.
 
 For development without Docker:
-1. Install Ollama locally: https://ollama.ai/download
-2. Start Ollama: `ollama serve`
-3. Pull the model: `ollama pull qwen2.5:7b`
-4. Run the app: `npm run dev`
-5. The app will connect to Ollama at `http://localhost:11434`
+1. Create a `.env.local` file with your API configuration:
+   ```
+   OPENAI_API_KEY=your-key-here
+   OPENAI_BASE_URL=https://api.openai.com/v1
+   OPENAI_MODEL=gpt-4o-mini
+   ```
+2. Run `npm install`
+3. Run `npm run dev`
 
 ### Docker Hub Deployment via GitHub Actions
 The project includes a GitHub Actions workflow (`.github/workflows/docker.yml`) that automatically builds and pushes Docker images to Docker Hub on pushes and pull requests.
@@ -59,11 +63,10 @@ The project includes a GitHub Actions workflow (`.github/workflows/docker.yml`) 
 
 ## LLM Configuration
 
-- **Model**: Default is Qwen 2.5 (7B parameters), configurable via `OLLAMA_MODEL` env var. Must support Ollama tool calling.
+- **Model**: Default is `gpt-4o-mini`, configurable via `OPENAI_MODEL` env var. Any OpenAI-compatible model with tool calling support will work.
+- **API Endpoint**: Default is `https://api.openai.com/v1`, configurable via `OPENAI_BASE_URL` for use with OpenAI-compatible proxies (e.g., ELM at Edinburgh).
 - **Guardrailing**: Implemented via system prompt allowing responses about Drosophila neuroscience, VFB data/tools, research papers, and methodologies while using MCP tools for accurate information.
-- **MCP Integration**: The LLM calls VFB MCP tools (`get_term_info`, `search_terms`, `run_query`) via Ollama's native tool calling API.
-- **Resource Requirements**: Runs on CPU-only, minimal RAM (~4-8GB), no GPU needed.
-- **Changing Models**: Set `OLLAMA_MODEL=modelname:tag` environment variable. The model must support Ollama tool calling. Known compatible models: `qwen2.5:7b`, `llama3.1:8b`, `qwen3:8b`.
+- **MCP Integration**: The LLM calls VFB MCP tools (`get_term_info`, `search_terms`, `run_query`) via the OpenAI tool calling API.
 
 ## VFB MCP Details
 
@@ -87,8 +90,8 @@ The project includes a GitHub Actions workflow (`.github/workflows/docker.yml`) 
 
 ## Development
 
-- **Docker**: `docker-compose up --build` (includes Ollama)
-- **Local**: `npm run dev` (requires Ollama running separately on localhost:11434)
+- **Docker**: `docker-compose up --build`
+- **Local**: `npm run dev` (requires `.env.local` with API credentials)
 - Build: `npm run build`
 - API: POST to `/api/chat` with `{ message, scene }`
 
