@@ -1,3 +1,16 @@
+Release 2.2.13
+
+This release adds a footer disclaimer for AI reliability warnings, enhances Google Analytics error handling, and includes additional citation fixes for improved user experience and data accuracy.
+
+Changes:
+- Added footer disclaimer at bottom of chat window warning about AI response reliability and data recording
+- Enhanced Google Analytics tracking with better error logging and success confirmation
+- Improved citation generation to prevent random DOI hallucination and ensure VFB data accuracy
+- Added UI disclaimer about verifying information with primary sources and not sharing private data
+- Updated README documentation to reflect UI disclaimer feature
+- Enhanced system prompt restrictions for citation generation
+- Improved user experience with clear privacy and reliability notices
+
 Release 2.2.12
 
 This release adds thumbnail URL validation to prevent display of broken images, fixes citation generation issues, and improves reliability of VFB data presentation.
