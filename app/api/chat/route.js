@@ -778,7 +778,7 @@ TOOLS:
 STRATEGY:
 1. For anatomy/neurons: search_terms with specific filters → get_term_info → run relevant queries
 2. Handle pagination if _truncation.canRequestMore=true
-3. Use pre-fetched term info when available (avoid redundant get_term_info calls)
+3. When you encounter a VFB term ID in user messages, call get_term_info to get detailed information about it
 4. When displaying multiple neurons or creating scene links, use the IDs directly from search results without calling get_term_info unless you need additional metadata like descriptions or images
 5. ALWAYS call get_term_info before using run_query to see what query types are available for that entity. Only use query types that appear in the Queries array returned by get_term_info.
 6. For connectivity queries: If a neuron class (IsClass: true) doesn't have connectivity data, look at individual neuron instances from connectomes. Use "ListAllAvailableImages" to find individual neurons, then check those individuals for connectivity queries like "NeuronNeuronConnectivityQuery".
@@ -788,73 +788,9 @@ DISPLAYING IMAGES:
 ONLY show thumbnail images when they are actually available AND validated to exist in the VFB data. NEVER make up or invent thumbnail URLs.
 When get_term_info returns visual data, include thumbnail URLs in your response using markdown image syntax:
 ![label](thumbnail_url)
-Do NOT show any images if no validated thumbnail URLs are available in the data. The user's chat interface renders these as compact thumbnails that expand on hover.
+Do NOT show any images if no validated thumbnail URLs are available in the data. The user's chat interface renders these as compact thumbnails that expand on hover.`
 
-VFB data structure and field selection:
-- Check the "IsClass" field to determine entity type
-- If IsClass is true: Use "Examples" field (anatomical regions have example images on multiple templates)
-- If IsClass is false AND "has_image" is in SuperTypes: Use "Images" field (individuals have aligned images)
-- Both fields are dictionaries where keys are template brain IDs and values are arrays of image objects
-- Each image object has a "thumbnail" field containing the actual URL
-- For connectivity: Neuron classes (IsClass: true) may not have direct connectivity data. Individual neurons from connectomes (IsClass: false) often have connectivity queries available.
-
-Template prioritization (when multiple templates available):
-1. JRC2018Unisex (VFB_00101567) - modern standard template
-2. JFRC2 (VFB_00017894) - commonly used adult brain template  
-3. Ito2014 (VFB_00030786) - classic adult brain template
-4. Other templates as available
-
-Examples:
-- Classes (IsClass: true) like medulla: Use Examples field with multiple template examples
-- Individuals (IsClass: false) with has_image like neurons: Use Images field with aligned images
-Use ONLY the actual thumbnail URLs from get_term_info responses. When pre-fetched term info includes "Thumbnail example:" URLs, use those exact URLs in your responses. Do not modify, shorten, or alter the URLs in any way.
-
-FORMATTING:
-Use full markdown in your responses: **bold** for term names, bullet lists for multiple results, [text](id) for VFB term links, ![alt](url) for images, and [citation](url) for paper references. Be concise, scientific, and suggest 3D visualisations when relevant.`
-
-        // Initial messages - prepend system prompt to conversation history
-        const resolvedUserMessage = replaceTermsWithLinks(message)
-        const conversationMessages = [
-          { role: 'system', content: systemPrompt },
-          ...messages.slice(0, -1).map(msg => ({ role: msg.role, content: msg.content })), // Previous messages
-          { role: 'user', content: resolvedUserMessage } // Current user message
-        ]
-
-        // Pre-fetch term info for any resolved terms to speed up responses
-        const termIds = extractTermIds(resolvedUserMessage)
-        if (termIds.length > 0 && mcpClient) {
-          log('Pre-fetching term info for IDs:', termIds)
-          try {
-            const termInfoPromises = termIds.map(async (id) => {
-              try {
-                const result = await mcpClient.callTool({
-                  name: 'get_term_info',
-                  arguments: { id }
-                })
-                return { id, result: result.content[0]?.text || 'No info available' }
-              } catch (error) {
-                log(`Failed to fetch term info for ${id}:`, error.message)
-                return { id, result: `Error fetching info: ${error.message}` }
-              }
-            })
-
-            const termInfos = await Promise.all(termInfoPromises)
-            
-            // Add pre-fetched term info as a system message
-            const termInfoContext = (await Promise.all(termInfos.map(async info => 
-              `Pre-fetched info for ${info.id}:\n${await summarizeTermInfo(info.result)}`
-            ))).join('\n\n')
-            
-            conversationMessages.splice(1, 0, { 
-              role: 'system', 
-              content: `Pre-fetched term info:\n${termInfoContext}\n\nUse this data - avoid redundant get_term_info calls.` 
-            })
-            
-            log(`Added pre-fetched info for ${termIds.length} terms`)
-          } catch (error) {
-            log('Failed to pre-fetch term info:', error.message)
-          }
-        }
+        // Term resolution happens during conversation via tool calls
 
         let finalResponse = ''
         const maxIterations = 3

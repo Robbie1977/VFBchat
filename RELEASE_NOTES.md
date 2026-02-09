@@ -1,3 +1,15 @@
+Release 2.2.15
+
+This release fixes critical issues with complex anatomical term information retrieval by removing problematic pre-fetching logic that caused timeouts for terms like mushroom body, and ensures the LLM properly fetches detailed information during conversations.
+
+Changes:
+- Removed pre-fetching of term information that was causing timeouts for complex anatomical structures (mushroom body, etc.)
+- Updated system prompt strategy to instruct LLM to call get_term_info during conversation when encountering VFB term IDs
+- Eliminated dependency on pre-fetching that prevented access to detailed information for complex terms
+- Fixed JavaScript syntax issues from refactoring
+- Now ensures complete and accurate responses for all anatomical terms, even if they take longer to fetch
+- Improved reliability for queries about complex brain regions with extensive metadata
+
 Release 2.2.14
 
 This release implements VFB_connect-style lookup methodology, fixes anatomical term mappings, and enhances fuzzy matching for improved AI accuracy in Drosophila neuroanatomy identification.
