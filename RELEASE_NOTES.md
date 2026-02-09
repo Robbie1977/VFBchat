@@ -1,3 +1,14 @@
+Release 2.2.10
+
+This release adds table rendering support for connectivity data and improves LLM understanding of neuron class vs individual connectivity queries.
+
+Changes:
+- Added table rendering components (table, thead, tbody, tr, th, td) to markdownComponents for proper display of connectivity data tables
+- Enhanced system prompt with guidance for connectivity queries: when neuron classes lack connectivity data, look at individual neurons from connectomes
+- Updated strategy section to explain using "ListAllAvailableImages" to find individual neurons, then checking for "NeuronNeuronConnectivityQuery" on those individuals
+- Improved LLM understanding of VFB data hierarchy: classes vs individuals for connectivity analysis
+- Better handling of large connectivity datasets with proper table formatting in chat interface
+
 Release 2.2.9
 
 This release optimizes VFB data queries and prevents LLM hallucinations when running analytical queries.
