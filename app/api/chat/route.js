@@ -322,6 +322,25 @@ async function summarizeTermInfo(termInfoText) {
     const isClass = data.IsClass || false
     const hasImage = data.SuperTypes?.includes('has_image') || false
     
+    // Extract publications from both Publications field and Synonyms field
+    let publications = [...(data.Publications || [])]
+    
+    // Extract FBrf IDs from synonyms
+    if (data.Synonyms && Array.isArray(data.Synonyms)) {
+      data.Synonyms.forEach(synonym => {
+        if (synonym.publication && typeof synonym.publication === 'string') {
+          // Extract FBrf IDs from publication strings like "[Bates et al., 2020](FBrf0246460)"
+          const fbrfMatch = synonym.publication.match(/FBrf\d+/g)
+          if (fbrfMatch) {
+            publications.push(...fbrfMatch)
+          }
+        }
+      })
+    }
+    
+    // Remove duplicates
+    publications = [...new Set(publications)]
+    
     const summary = {
       id: data.Id || data.id,
       name: data.Name || data.name,
@@ -333,7 +352,7 @@ async function summarizeTermInfo(termInfoText) {
       hasImage: hasImage,
       // Use appropriate field based on entity type
       visualData: isClass ? (data.Examples || {}) : (hasImage ? (data.Images || {}) : {}),
-      publications: data.Publications || []
+      publications: publications
     }
     
     // Format as concise text
@@ -638,13 +657,13 @@ ACCURACY:
 - When citing research, use FBrf reference IDs from VFB data where available.
 
 CITATIONS:
-- When mentioning papers or publications, convert citations into proper links
-- Common Drosophila neuroscience papers:
-  - Ito et al., 2013 (optic lobe nomenclature): https://doi.org/10.1016/j.cub.2013.03.015
-  - Ito et al., 2014 (brain nomenclature): https://doi.org/10.1016/j.cub.2014.10.057
-- For FlyBase references, use format: https://flybase.org/reports/FBrfXXXXXXX
-- For DOI links, use format: https://doi.org/XXXXXXX
-- If Publications field contains DOI or FBrf IDs, convert them to proper links
+- ONLY cite publications that are explicitly returned in VFB data Publications field
+- Do NOT generate citations from general knowledge or invent DOIs
+- If no publications are available in VFB data, do not include any citations
+- For publications from VFB data, convert DOI or FBrf IDs to proper links:
+  - DOI format: https://doi.org/XXXXXXX
+  - FBrf format: https://flybase.org/reports/FBrfXXXXXXX
+- Do not reference "common Drosophila neuroscience papers" unless they appear in the actual VFB data for the specific entity being discussed
 
 TOOLS:
 - search_terms(query, filter_types, exclude_types, boost_types, start, rows): Search VFB terms with filters like ["neuron","adult","has_image"] for adult neurons, ["anatomy"] for brain regions, ["gene"] for genes. Always exclude ["deprecated"].
