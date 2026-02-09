@@ -137,17 +137,28 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
 
   // Custom renderers for react-markdown
   const renderLink = ({ href, children }) => {
-    const isVfbId = href && !href.startsWith('http') && (href.startsWith('VFB') || href.startsWith('FBbt') || href.startsWith('FBrf'))
-    const url = isVfbId
-      ? `https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=${href}`
-      : href
+    let url = href
+    let title = undefined
+    
+    if (href && !href.startsWith('http')) {
+      if (href.startsWith('FBrf')) {
+        // FlyBase references should link to FlyBase
+        url = `https://flybase.org/reports/${href}`
+        title = 'View in FlyBase'
+      } else if (href.startsWith('VFB') || href.startsWith('FBbt')) {
+        // VFB and FBbt IDs should link to VFB
+        url = `https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=${href}`
+        title = 'View in VFB'
+      }
+    }
+    
     return (
       <a
         href={url}
         target="_blank"
         rel="noopener noreferrer"
         style={{ color: '#66d9ff', textDecoration: 'underline', textDecorationColor: '#66d9ff40' }}
-        title={isVfbId ? 'View in VFB' : undefined}
+        title={title}
       >
         {children}
       </a>
