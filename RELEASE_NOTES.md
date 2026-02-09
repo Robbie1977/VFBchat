@@ -1,3 +1,15 @@
+Release 2.2.12
+
+This release adds thumbnail URL validation to prevent display of broken images and improves reliability of VFB data presentation.
+
+Changes:
+- Added async thumbnail URL validation using axios.head to check image existence before inclusion
+- Modified summarizeTermInfo function to validate thumbnail URLs with 2-second timeout
+- Updated system prompt to emphasize validated thumbnails only
+- Prevents LLM from hallucinating invalid URLs like malformed template IDs (e.g., /VFB_001011rk/)
+- Added error handling and logging for failed thumbnail validations
+- Improved user experience by filtering out broken image links
+
 Release 2.2.11
 
 This release fixes a critical bug in tool call processing that was causing crashes when the LLM made MCP queries.

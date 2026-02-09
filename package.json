@@ -1,6 +1,6 @@
 {
   "name": "vfb-chat-client",
-  "version": "2.2.11",
+  "version": "2.2.12",
   "private": true,
   "scripts": {
     "dev": "next dev",

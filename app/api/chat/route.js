@@ -151,6 +151,22 @@ function detectJailbreakAttempt(message) {
   return false
 }
 
+// Validate if a thumbnail URL actually exists
+async function validateThumbnailUrl(url) {
+  try {
+    const response = await axios.head(url, { 
+      timeout: 2000, // 2 second timeout
+      headers: {
+        'User-Agent': 'VFBchat-Thumbnail-Validator/1.0'
+      }
+    })
+    return response.status === 200
+  } catch (error) {
+    log('Thumbnail validation failed', { url, error: error.message })
+    return false
+  }
+}
+
 // Global lookup cache (persists across requests)
 let lookupCache = null
 let reverseLookupCache = null
@@ -298,7 +314,7 @@ function extractTermIds(text) {
 }
 
 // Summarize term info to reduce prompt length
-function summarizeTermInfo(termInfoText) {
+async function summarizeTermInfo(termInfoText) {
   try {
     const data = JSON.parse(termInfoText)
     
@@ -327,9 +343,9 @@ function summarizeTermInfo(termInfoText) {
     if (summary.tags.length > 0) result += ` (Tags: ${summary.tags.join(', ')})`
     
     // Include image information if available
-    const visualEntries = Object.entries(summary.visualData)
+    const visualEntries = Object.entries(summary.visualData || {})
     if (visualEntries.length > 0) {
-      const totalImages = visualEntries.reduce((sum, [_, images]) => sum + images.length, 0)
+      const totalImages = visualEntries.reduce((sum, [_, images]) => sum + (images?.length || 0), 0)
       const dataType = summary.isClass ? 'example' : 'aligned'
       result += ` (Has ${totalImages} ${dataType} image(s))`
       
@@ -343,11 +359,20 @@ function summarizeTermInfo(termInfoText) {
         return aPriority - bPriority
       })
       
-      // Include first available thumbnail URL as example
+      // Include first available thumbnail URL as example (validate it exists)
       for (const [templateId, images] of sortedEntries) {
-        if (images && images.length > 0 && images[0].thumbnail) {
-          result += `\nThumbnail example: ${images[0].thumbnail}`
-          break
+        if (images && Array.isArray(images) && images.length > 0 && images[0]?.thumbnail) {
+          try {
+            const isValid = await validateThumbnailUrl(images[0].thumbnail)
+            if (isValid) {
+              result += `\nThumbnail example: ${images[0].thumbnail}`
+              break
+            } else {
+              log('Skipping invalid thumbnail URL', { url: images[0].thumbnail })
+            }
+          } catch (error) {
+            log('Thumbnail validation error, skipping', { url: images[0].thumbnail, error: error.message })
+          }
         }
       }
     }
@@ -636,10 +661,10 @@ STRATEGY:
 7. Construct VFB URLs: https://v2.virtualflybrain.org/org.geppetto.frontend/geppetto?id=<id>&i=<template_id>,<image_ids>
 
 DISPLAYING IMAGES:
-ONLY show thumbnail images when they are actually available in the VFB data. NEVER make up or invent thumbnail URLs.
+ONLY show thumbnail images when they are actually available AND validated to exist in the VFB data. NEVER make up or invent thumbnail URLs.
 When get_term_info returns visual data, include thumbnail URLs in your response using markdown image syntax:
 ![label](thumbnail_url)
-Do NOT show any images if no thumbnail URLs are available in the data. The user's chat interface renders these as compact thumbnails that expand on hover.
+Do NOT show any images if no validated thumbnail URLs are available in the data. The user's chat interface renders these as compact thumbnails that expand on hover.
 
 VFB data structure and field selection:
 - Check the "IsClass" field to determine entity type
@@ -692,9 +717,9 @@ Use full markdown in your responses: **bold** for term names, bullet lists for m
             const termInfos = await Promise.all(termInfoPromises)
             
             // Add pre-fetched term info as a system message
-            const termInfoContext = termInfos.map(info => 
-              `Pre-fetched info for ${info.id}:\n${summarizeTermInfo(info.result)}`
-            ).join('\n\n')
+            const termInfoContext = (await Promise.all(termInfos.map(async info => 
+              `Pre-fetched info for ${info.id}:\n${await summarizeTermInfo(info.result)}`
+            ))).join('\n\n')
             
             conversationMessages.splice(1, 0, { 
               role: 'system', 
