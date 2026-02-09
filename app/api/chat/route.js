@@ -310,7 +310,8 @@ function summarizeTermInfo(termInfoText) {
       type: data.Types || data.type,
       superTypes: data.SuperTypes?.slice(0, 3) || [],
       tags: data.Tags?.slice(0, 5) || [],
-      images: data.Images || {}
+      images: data.Images || {},
+      publications: data.Publications || []
     }
     
     // Format as concise text
@@ -332,6 +333,11 @@ function summarizeTermInfo(termInfoText) {
           break
         }
       }
+    }
+    
+    // Include publication information if available
+    if (summary.publications.length > 0) {
+      result += `\nPublications: ${summary.publications.slice(0, 3).join(', ')}${summary.publications.length > 3 ? '...' : ''}`
     }
   } catch (error) {
     // If parsing fails, return a truncated version of the original text
@@ -587,6 +593,15 @@ ACCURACY:
 - Clearly distinguish between data from VFB tools and your general scientific knowledge.
 - When citing research, use FBrf reference IDs from VFB data where available.
 
+CITATIONS:
+- When mentioning papers or publications, convert citations into proper links
+- Common Drosophila neuroscience papers:
+  - Ito et al., 2013 (optic lobe nomenclature): https://doi.org/10.1016/j.cub.2013.03.015
+  - Ito et al., 2014 (brain nomenclature): https://doi.org/10.1016/j.cub.2014.10.057
+- For FlyBase references, use format: https://flybase.org/reports/FBrfXXXXXXX
+- For DOI links, use format: https://doi.org/XXXXXXX
+- If Publications field contains DOI or FBrf IDs, convert them to proper links
+
 TOOLS:
 - search_terms(query, filter_types, exclude_types, boost_types, start, rows): Search VFB terms with filters like ["neuron","adult","has_image"] for adult neurons, ["anatomy"] for brain regions, ["gene"] for genes. Always exclude ["deprecated"].
 - get_term_info(id): Get detailed info about a VFB entity by ID
@@ -617,7 +632,7 @@ Images: {
 Use the actual thumbnail URLs from get_term_info responses, not placeholder URLs. When pre-fetched term info includes "Thumbnail example:" URLs, use those in your responses.
 
 FORMATTING:
-Use full markdown in your responses: **bold** for term names, bullet lists for multiple results, [text](id) for VFB term links, and ![alt](url) for images. Be concise, scientific, and suggest 3D visualisations when relevant.`
+Use full markdown in your responses: **bold** for term names, bullet lists for multiple results, [text](id) for VFB term links, ![alt](url) for images, and [citation](url) for paper references. Be concise, scientific, and suggest 3D visualisations when relevant.`
 
         // Initial messages
         const resolvedUserMessage = replaceTermsWithLinks(message)

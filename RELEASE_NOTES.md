@@ -1,3 +1,14 @@
+Release 2.2.2
+
+This release improves paper citation formatting by converting plain text citations into proper clickable links, enhancing the scientific reference experience for users.
+
+Changes:
+- Added CITATIONS section to system prompt with common Drosophila neuroscience paper links
+- Updated FORMATTING instructions to include [citation](url) format for paper references
+- Enhanced term info summarization to include publication data when available
+- Added mappings for common citations like Ito et al., 2013 and Ito et al., 2014
+- Improved LLM instructions for converting DOI and FBrf IDs into proper links
+
 Release 2.2.1
 
 This release fixes a critical bug where thumbnail images were displaying placeholder URLs ("...") instead of actual image IDs, preventing proper visualization of VFB neuroscience images.
