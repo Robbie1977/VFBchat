@@ -1,12 +1,15 @@
 Release 2.2.16
 
-This release fixes a critical runtime error that was preventing the chat API from functioning, ensuring the application works properly after the pre-fetching refactoring.
+This release fixes a critical runtime error that was preventing the chat API from functioning, and adds configurable timeouts to prevent MCP server timeouts for complex anatomical queries.
 
 Changes:
 - Fixed 'conversationMessages is not defined' runtime error in chat API route
 - Added proper initialization of conversationMessages array with system prompt, message history, and resolved user message
 - Ensures proper message flow for LLM API calls with MCP tool integration
-- Application now functions correctly without crashing on chat requests
+- Added configurable timeout wrapper for MCP tool calls (30s for regular calls, 15s for pre-fetching, 60s for cache loading)
+- Prevents indefinite hangs when MCP server takes too long to respond to complex queries (e.g., mushroom body structures)
+- Application now handles MCP timeouts gracefully instead of crashing
+- Improved reliability for queries about complex anatomical terms that require longer processing time
 
 Release 2.2.15
 
