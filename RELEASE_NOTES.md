@@ -1,3 +1,13 @@
+Release 2.2.16
+
+This release fixes a critical runtime error that was preventing the chat API from functioning, ensuring the application works properly after the pre-fetching refactoring.
+
+Changes:
+- Fixed 'conversationMessages is not defined' runtime error in chat API route
+- Added proper initialization of conversationMessages array with system prompt, message history, and resolved user message
+- Ensures proper message flow for LLM API calls with MCP tool integration
+- Application now functions correctly without crashing on chat requests
+
 Release 2.2.15
 
 This release fixes critical issues with complex anatomical term information retrieval by removing problematic pre-fetching logic that caused timeouts for terms like mushroom body, and ensures the LLM properly fetches detailed information during conversations.
