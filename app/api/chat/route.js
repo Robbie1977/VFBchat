@@ -10,6 +10,12 @@ const GA_MEASUREMENT_ID = process.env.GA_MEASUREMENT_ID || 'G-K7DDZVVXM7'
 const GA_API_SECRET = process.env.GA_API_SECRET || ''
 const GA_ENABLED = !!(GA_MEASUREMENT_ID && GA_API_SECRET)
 
+log('GA Configuration', {
+  measurementId: GA_MEASUREMENT_ID,
+  apiSecretSet: !!GA_API_SECRET,
+  enabled: GA_ENABLED
+})
+
 function log(message, data = {}) {
   const timestamp = new Date().toISOString()
   console.log(`[${timestamp}] ${message}`, Object.keys(data).length ? data : '')
@@ -17,11 +23,16 @@ function log(message, data = {}) {
 
 // Track user queries and responses to Google Analytics
 function trackQuery(query, responseLength, duration, sessionId) {
-  if (!GA_ENABLED) return
-  
+  if (!GA_ENABLED) {
+    log('GA tracking disabled - missing GA_MEASUREMENT_ID or GA_API_SECRET')
+    return
+  }
+
+  log('GA tracking enabled, sending event', { queryLength: query.length, responseLength, duration })
+
   // Truncate query for privacy and to avoid GA limits (500 char limit per parameter)
   const truncatedQuery = query.length > 200 ? query.substring(0, 200) + '...' : query
-  
+
   const payload = {
     client_id: sessionId || 'anonymous',
     events: [{
@@ -36,11 +47,15 @@ function trackQuery(query, responseLength, duration, sessionId) {
       }
     }]
   }
-  
+
   axios.post(
     `https://www.google-analytics.com/mp/collect?measurement_id=${GA_MEASUREMENT_ID}&api_secret=${GA_API_SECRET}`,
     payload
-  ).catch(() => {}) // Silent fail for analytics
+  ).then(() => {
+    log('GA event sent successfully')
+  }).catch((error) => {
+    log('GA event failed', { error: error.message, status: error.response?.status })
+  })
 }
 
 // Parse tool arguments - OpenAI returns JSON string, Ollama returns object
