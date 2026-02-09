@@ -1,3 +1,15 @@
+Release 2.2.4
+
+This release improves thumbnail image selection by properly handling both individual neuron images and anatomical region examples, with intelligent template prioritization.
+
+Changes:
+- Added support for "Examples" field in addition to "Images" field from VFB API
+- Anatomical regions (classes) use "Examples" while individual neurons use "Images"
+- Implemented template prioritization: JRC2018Unisex → JFRC2 → Ito2014 → others
+- Updated system prompt to explain the difference between Images and Examples
+- Enhanced summarizeTermInfo function to handle both data types with proper prioritization
+- Improved LLM guidance for selecting appropriate thumbnails based on entity type
+
 Release 2.2.3
 
 This release fixes a critical issue where the AI was generating fake thumbnail URLs instead of using actual URLs from VFB data.
