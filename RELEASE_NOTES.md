@@ -1,3 +1,17 @@
+Release 2.2.14
+
+This release implements VFB_connect-style lookup methodology, fixes anatomical term mappings, and enhances fuzzy matching for improved AI accuracy in Drosophila neuroanatomy identification.
+
+Changes:
+- Implemented VFB_connect-style lookup system with database-driven loading from VFB MCP server
+- Fixed MCP tool calls in loadVfbLookupTable function to use correct tool names (mcp_virtual-fly-b_search_terms)
+- Corrected anatomical term mappings that were causing AI confusion between brain regions (mushroom body, protocerebrum, deutocerebrum, etc.)
+- Enhanced fuzzy matching with prefix substitutions for developmental stages (adult/larval/pupal/embryonic)
+- Replaced hardcoded seed data with verified essential anatomical terms as fallback
+- Improved term resolution with multiple matching strategies and normalized fuzzy matching
+- Added comprehensive lookup cache with 2,500+ verified term mappings from VFB database
+- Enhanced error handling for MCP connection failures with graceful fallback to essential terms
+
 Release 2.2.13
 
 This release adds a footer disclaimer for AI reliability warnings, enhances Google Analytics error handling, and includes additional citation fixes for improved user experience and data accuracy.
