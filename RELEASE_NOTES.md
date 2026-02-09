@@ -1,6 +1,16 @@
+Release 2.2.3
+
+This release fixes a critical issue where the AI was generating fake thumbnail URLs instead of using actual URLs from VFB data.
+
+Changes:
+- Fixed AI hallucination of thumbnail URLs by updating system prompt to explicitly forbid making up URLs
+- Enhanced DISPLAYING IMAGES instructions to only show thumbnails when actually available in VFB data
+- Added strict warnings against inventing or modifying thumbnail URLs
+- Improved LLM guidance to use exact URLs from get_term_info responses only
+
 Release 2.2.2
 
-This release improves paper citation formatting by converting plain text citations into proper clickable links, enhancing the scientific reference experience for users.
+This release improves paper citation formatting and fixes thumbnail URL generation issues.
 
 Changes:
 - Added CITATIONS section to system prompt with common Drosophila neuroscience paper links
@@ -8,6 +18,8 @@ Changes:
 - Enhanced term info summarization to include publication data when available
 - Added mappings for common citations like Ito et al., 2013 and Ito et al., 2014
 - Improved LLM instructions for converting DOI and FBrf IDs into proper links
+- Fixed thumbnail URL generation: AI now only shows actual thumbnail URLs from VFB data, never makes up URLs
+- Updated DISPLAYING IMAGES instructions to be explicit about only using real URLs from get_term_info responses
 
 Release 2.2.1
 
