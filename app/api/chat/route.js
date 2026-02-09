@@ -303,6 +303,9 @@ function summarizeTermInfo(termInfoText) {
     const data = JSON.parse(termInfoText)
     
     // Extract key information based on actual VFB response structure
+    const isClass = data.IsClass || false
+    const hasImage = data.SuperTypes?.includes('has_image') || false
+    
     const summary = {
       id: data.Id || data.id,
       name: data.Name || data.name,
@@ -310,8 +313,10 @@ function summarizeTermInfo(termInfoText) {
       type: data.Types || data.type,
       superTypes: data.SuperTypes?.slice(0, 3) || [],
       tags: data.Tags?.slice(0, 5) || [],
-      images: data.Images || {},
-      examples: data.Examples || {}, // Anatomical regions have Examples instead of Images
+      isClass: isClass,
+      hasImage: hasImage,
+      // Use appropriate field based on entity type
+      visualData: isClass ? (data.Examples || {}) : (hasImage ? (data.Images || {}) : {}),
       publications: data.Publications || []
     }
     
@@ -321,12 +326,12 @@ function summarizeTermInfo(termInfoText) {
     if (summary.superTypes.length > 0) result += ` (SuperTypes: ${summary.superTypes.join(', ')})`
     if (summary.tags.length > 0) result += ` (Tags: ${summary.tags.join(', ')})`
     
-    // Include image information if available (Images for individuals, Examples for anatomical regions)
-    const allVisualData = { ...summary.images, ...summary.examples }
-    const visualEntries = Object.entries(allVisualData)
+    // Include image information if available
+    const visualEntries = Object.entries(summary.visualData)
     if (visualEntries.length > 0) {
       const totalImages = visualEntries.reduce((sum, [_, images]) => sum + images.length, 0)
-      result += ` (Has ${totalImages} image(s))`
+      const dataType = summary.isClass ? 'example' : 'aligned'
+      result += ` (Has ${totalImages} ${dataType} image(s))`
       
       // Prioritize certain templates: JRC2018Unisex (VFB_00101567), then JFRC2 (VFB_00017894), then others
       const templatePriority = ['VFB_00101567', 'VFB_00017894', 'VFB_00030786', 'VFB_00101384']
@@ -627,13 +632,14 @@ STRATEGY:
 
 DISPLAYING IMAGES:
 ONLY show thumbnail images when they are actually available in the VFB data. NEVER make up or invent thumbnail URLs.
-When get_term_info returns Images or Examples fields with actual thumbnail URLs, include them in your response using markdown image syntax:
+When get_term_info returns visual data, include thumbnail URLs in your response using markdown image syntax:
 ![label](thumbnail_url)
 Do NOT show any images if no thumbnail URLs are available in the data. The user's chat interface renders these as compact thumbnails that expand on hover.
 
-VFB data structure:
-- Individual neurons/entities have an "Images" field with aligned images on specific templates
-- Anatomical regions/classes have an "Examples" field with example images on various templates
+VFB data structure and field selection:
+- Check the "IsClass" field to determine entity type
+- If IsClass is true: Use "Examples" field (anatomical regions have example images on multiple templates)
+- If IsClass is false AND "has_image" is in SuperTypes: Use "Images" field (individuals have aligned images)
 - Both fields are dictionaries where keys are template brain IDs and values are arrays of image objects
 - Each image object has a "thumbnail" field containing the actual URL
 
@@ -643,27 +649,9 @@ Template prioritization (when multiple templates available):
 3. Ito2014 (VFB_00030786) - classic adult brain template
 4. Other templates as available
 
-For example:
-Images: {
-  "VFB_00101567": [  // JRC2018Unisex template (preferred)
-    {
-      "id": "VFB_jrcv0i43",
-      "label": "IN02A032_T2_L (MANC:23475)",
-      "thumbnail": "https://www.virtualflybrain.org/data/VFB/i/jrcv/0i43/VFB_00200000/thumbnail.png",
-      ...
-    }
-  ]
-}
-Examples: {  // For anatomical regions like medulla
-  "VFB_00101567": [  // JRC2018Unisex template (preferred)
-    {
-      "id": "VFB_00102107",
-      "label": "ME on JRC2018Unisex adult brain",
-      "thumbnail": "https://www.virtualflybrain.org/data/VFB/i/0010/2107/VFB_00101567/thumbnail.png",
-      ...
-    }
-  ]
-}
+Examples:
+- Classes (IsClass: true) like medulla: Use Examples field with multiple template examples
+- Individuals (IsClass: false) with has_image like neurons: Use Images field with aligned images
 Use ONLY the actual thumbnail URLs from get_term_info responses. When pre-fetched term info includes "Thumbnail example:" URLs, use those exact URLs in your responses. Do not modify, shorten, or alter the URLs in any way.
 
 FORMATTING:

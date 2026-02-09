@@ -1,3 +1,15 @@
+Release 2.2.5
+
+This release refines thumbnail image selection by using precise VFB data structure logic based on IsClass and has_image fields.
+
+Changes:
+- Implemented precise field selection: IsClass=true uses Examples, IsClass=false + has_image uses Images
+- Updated summarizeTermInfo to check IsClass and SuperTypes for correct field selection
+- Simplified visual data processing by using single visualData field based on entity type
+- Enhanced system prompt with accurate VFB data structure explanation
+- Improved LLM guidance for proper Images vs Examples field usage
+- Added clearer distinction between "aligned images" (individuals) and "example images" (classes)
+
 Release 2.2.4
 
 This release improves thumbnail image selection by properly handling both individual neuron images and anatomical region examples, with intelligent template prioritization.
