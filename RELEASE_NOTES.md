@@ -1,3 +1,15 @@
+Release 2.2.7
+
+This release fixes image clipping issues in the chat interface by improving how VFB thumbnail images are displayed.
+
+Changes:
+- Fixed image clipping by removing forced square aspect ratio (64x64px) for VFB thumbnails
+- Changed thumbnail images to use maxHeight: 64px with auto width for proper aspect ratio
+- Switched from objectFit: 'cover' to 'contain' to prevent image distortion
+- Increased maxWidth to 120px to allow wider images while maintaining height limit
+- Preserves image integrity for brain region anatomical images
+- Improved visual quality of inline image thumbnails
+
 Release 2.2.6
 
 This release fixes a critical issue where the LLM was losing conversation context between messages, preventing proper follow-up responses.
