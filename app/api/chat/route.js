@@ -182,18 +182,6 @@ async function validateThumbnailUrl(url) {
   }
 }
 
-// Timeout wrapper for MCP tool calls
-async function callToolWithTimeout(mcpClient, toolCall, timeoutMs = 30000) {
-  const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error(`Tool call timed out after ${timeoutMs}ms`)), timeoutMs)
-  })
-  
-  return Promise.race([
-    mcpClient.callTool(toolCall),
-    timeoutPromise
-  ])
-}
-
 // Global lookup cache (persists across requests)
 let lookupCache = null
 let reverseLookupCache = null
@@ -260,13 +248,13 @@ async function loadVfbLookupTable(mcpClient) {
   try {
     // Use MCP to get a comprehensive lookup table from VFB
     // This simulates what VFB_connect does with Neo4jConnect.get_lookup()
-    const toolResult = await callToolWithTimeout(mcpClient, {
+    const toolResult = await mcpClient.callTool({
       name: 'mcp_virtual-fly-b_search_terms',
       arguments: {
         query: 'medulla OR protocerebrum OR mushroom OR central OR brain',  // Search for key anatomical terms
         rows: 1000  // Get substantial data
       }
-    }, 60000) // 60 second timeout for initial cache loading
+    })
 
     if (toolResult?.content?.[0]?.text) {
       const parsedResult = JSON.parse(toolResult.content[0].text)
@@ -935,12 +923,12 @@ Do NOT show any images if no validated thumbnail URLs are available in the data.
                     if (callArgs.start === undefined) callArgs.start = 0
                   }
 
-                  // Use MCP client to call the tool with timeout
+                  // Use MCP client to call the tool
                   if (mcpClient.getServerCapabilities()?.tools) {
-                    const result = await callToolWithTimeout(mcpClient, {
+                    const result = await mcpClient.callTool({
                       name: toolCall.function.name,
                       arguments: callArgs
-                    }, 30000) // 30 second timeout for tool calls
+                    })
                     toolResult = result
                   } else {
                     throw new Error('MCP server does not support tools')
@@ -1003,10 +991,10 @@ Do NOT show any images if no validated thumbnail URLs are available in the data.
                           
                           // Pre-fetch term info for the exact match
                           try {
-                            const termInfoResult = await callToolWithTimeout(mcpClient, {
+                            const termInfoResult = await mcpClient.callTool({
                               name: 'get_term_info',
                               arguments: { id: exactMatch.short_form }
-                            }, 15000) // 15 second timeout for pre-fetching
+                            })
                             parsedResult._term_info = termInfoResult
                             log('Pre-fetched term info for exact match', { id: exactMatch.short_form })
                           } catch (termInfoError) {
