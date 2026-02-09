@@ -792,6 +792,14 @@ Do NOT show any images if no validated thumbnail URLs are available in the data.
 
         // Term resolution happens during conversation via tool calls
 
+        // Initial messages - prepend system prompt to conversation history
+        const resolvedUserMessage = replaceTermsWithLinks(message)
+        const conversationMessages = [
+          { role: 'system', content: systemPrompt },
+          ...messages.slice(0, -1).map(msg => ({ role: msg.role, content: msg.content })), // Previous messages
+          { role: 'user', content: resolvedUserMessage } // Current user message
+        ]
+
         let finalResponse = ''
         const maxIterations = 3
 
