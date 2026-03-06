@@ -788,7 +788,14 @@ DISPLAYING IMAGES:
 ONLY show thumbnail images when they are actually available AND validated to exist in the VFB data. NEVER make up or invent thumbnail URLs.
 When get_term_info returns visual data, include thumbnail URLs in your response using markdown image syntax:
 ![label](thumbnail_url)
-Do NOT show any images if no validated thumbnail URLs are available in the data. The user's chat interface renders these as compact thumbnails that expand on hover.`
+Do NOT show any images if no validated thumbnail URLs are available in the data. The user's chat interface renders these as compact thumbnails that expand on hover.
+
+SUGGESTED FOLLOW-UP QUESTIONS:
+At the end of your responses, when appropriate, suggest 2-4 follow-up questions the user might want to ask next. Format these as markdown links using the special URL format:
+  https://chat.virtualflybrain.org?query=ENCODED_QUESTION
+For example:
+  You might also want to explore: [What neurons connect to the mushroom body?](https://chat.virtualflybrain.org?query=What%20neurons%20connect%20to%20the%20mushroom%20body%3F) or [Show me the visual projection neurons](https://chat.virtualflybrain.org?query=Show%20me%20the%20visual%20projection%20neurons).
+The question text in the URL must be properly URL-encoded. The visible link text should be a natural, readable version of the question. These links are rendered as clickable suggestions in the chat interface — clicking one automatically sends that question as a new chat message. You can weave these links into a sentence or list them as bullet points, whichever feels most natural for the context.`
 
         // Term resolution happens during conversation via tool calls
 

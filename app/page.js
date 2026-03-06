@@ -215,41 +215,41 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
     return []
   }
 
-  // Convert suggested questions to markdown links within the content
-  const convertSuggestionsToLinks = (content, suggestions) => {
-    if (suggestions.length === 0) return content
-    
-    // Find and replace the suggestion list items with markdown links
-    let modified = content
-    
-    suggestions.forEach(suggestion => {
-      // Create regex that matches the list item in various bullet formats
-      const escapedSuggestion = suggestion.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      const patterns = [
-        // With leading dash/bullet
-        new RegExp(`^[-•*]\\s+${escapedSuggestion}$`, 'gm'),
-        // With number prefix
-        new RegExp(`^\\d+[.)]\\s+${escapedSuggestion}$`, 'gm'),
-        // Without prefix (just the text)
-        new RegExp(`^${escapedSuggestion}$`, 'gm')
-      ]
-      
-      patterns.forEach(pattern => {
-        if (pattern.test(modified)) {
-          const shareUrl = `https://chat.virtualflybrain.org?query=${encodeURIComponent(suggestion)}`
-          const markdownLink = `[${suggestion}](${shareUrl})`
-          modified = modified.replace(pattern, `- ${markdownLink}`)
-        }
-      })
-    })
-    
-    return modified
-  }
-
   // Custom renderers for react-markdown
   const renderLink = ({ href, children }) => {
     let url = href
     let title = undefined
+    let isQueryLink = false
+    
+    // Handle chat.virtualflybrain.org query links
+    if (href && href.startsWith('https://chat.virtualflybrain.org?query=')) {
+      isQueryLink = true
+      const params = new URLSearchParams(href.split('?')[1])
+      const queryText = params.get('query')
+      
+      if (isQueryLink) {
+        return (
+          <a
+            href={href}
+            onClick={(e) => {
+              e.preventDefault()
+              if (queryText) {
+                handleSend(queryText)
+              }
+            }}
+            style={{ 
+              color: '#66d9ff', 
+              textDecoration: 'underline', 
+              textDecorationColor: '#66d9ff40',
+              cursor: 'pointer'
+            }}
+            title={`Ask: ${queryText}`}
+          >
+            {children}
+          </a>
+        )
+      }
+    }
     
     if (href && !href.startsWith('http')) {
       if (href.startsWith('FBrf')) {
@@ -380,64 +380,56 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
         borderRadius: '8px',
         minHeight: 0
       }}>
-        {messages.map((msg, idx) => {
-          const suggestedQuestions = msg.role === 'assistant' ? extractSuggestedQuestions(msg.content) : []
-          const displayContent = msg.role === 'assistant' && suggestedQuestions.length > 0 
-            ? convertSuggestionsToLinks(msg.content, suggestedQuestions)
-            : msg.content
-          
-          return (
-            <div key={idx} style={{
-              marginBottom: '12px',
-              padding: '8px 12px',
-              backgroundColor: msg.role === 'user' ? '#1a1a2e' : 'transparent',
-              borderRadius: '6px',
-              borderLeft: msg.role === 'user' ? '3px solid #4a9eff' : '3px solid #2a6a3a'
+        {messages.map((msg, idx) => (
+          <div key={idx} style={{
+            marginBottom: '12px',
+            padding: '8px 12px',
+            backgroundColor: msg.role === 'user' ? '#1a1a2e' : 'transparent',
+            borderRadius: '6px',
+            borderLeft: msg.role === 'user' ? '3px solid #4a9eff' : '3px solid #2a6a3a'
+          }}>
+            <div style={{
+              fontSize: '0.75em',
+              fontWeight: 600,
+              color: msg.role === 'user' ? '#4a9eff' : '#4ade80',
+              marginBottom: '4px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
             }}>
-              <div style={{
-                fontSize: '0.75em',
-                fontWeight: 600,
-                color: msg.role === 'user' ? '#4a9eff' : '#4ade80',
-                marginBottom: '4px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>
-                {getDisplayName(msg.role)}
-              </div>
-              <div
-                className="message-content"
-                style={msg.role === 'reasoning' ? { fontSize: '0.85em', fontStyle: 'italic', color: '#999' } : {}}
-              >
-                <ReactMarkdown components={markdownComponents}>
-                  {displayContent}
-                </ReactMarkdown>
-              </div>
-              
-              {/* Image gallery from API images field */}
-              {msg.images && msg.images.length > 0 && (
-                <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {msg.images.map((img, i) => (
-                    <div key={i} style={{ display: 'inline-block' }}>
-                      <img
-                        src={img.thumbnail}
-                        alt={img.label}
-                        style={{
-                          width: '80px',
-                          height: '80px',
-                          objectFit: 'cover',
-                          border: '1px solid #444',
-                          borderRadius: '4px',
-                          cursor: 'pointer'
-                        }}
-                        title={img.label}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
+              {getDisplayName(msg.role)}
             </div>
-          )
-        })}
+            <div
+              className="message-content"
+              style={msg.role === 'reasoning' ? { fontSize: '0.85em', fontStyle: 'italic', color: '#999' } : {}}
+            >
+              <ReactMarkdown components={markdownComponents}>
+                {msg.content}
+              </ReactMarkdown>
+            </div>
+            {/* Image gallery from API images field */}
+            {msg.images && msg.images.length > 0 && (
+              <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {msg.images.map((img, i) => (
+                  <div key={i} style={{ display: 'inline-block' }}>
+                    <img
+                      src={img.thumbnail}
+                      alt={img.label}
+                      style={{
+                        width: '80px',
+                        height: '80px',
+                        objectFit: 'cover',
+                        border: '1px solid #444',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                      title={img.label}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
         {isThinking && (
           <div style={{
             marginBottom: '12px',
