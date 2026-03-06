@@ -58,6 +58,28 @@ function trackQuery(query, responseLength, duration, sessionId) {
   })
 }
 
+// Sanitize API error responses – replace raw HTML (e.g. Cloudflare 5xx pages)
+// with a concise, user-friendly message.
+function sanitizeApiError(statusCode, rawText) {
+  // Detect HTML error pages (Cloudflare, nginx, etc.)
+  if (rawText && (rawText.trim().startsWith('<!DOCTYPE') || rawText.trim().startsWith('<html'))) {
+    // Try to extract the <title> for a short summary
+    const titleMatch = rawText.match(/<title[^>]*>([^<]+)<\/title>/i)
+    const title = titleMatch ? titleMatch[1].trim() : `HTTP ${statusCode}`
+    return `The AI service returned an error (${title}). This is usually a temporary issue — please try again in a moment.`
+  }
+  // Cap very long non-HTML errors to avoid flooding the UI
+  if (rawText && rawText.length > 400) {
+    return rawText.substring(0, 400) + '…'
+  }
+  return rawText || `HTTP ${statusCode}`
+}
+
+// Determine whether an HTTP status code is a transient server error worth retrying
+function isTransientError(status) {
+  return [429, 500, 502, 503, 504, 520, 521, 522, 524].includes(status)
+}
+
 // Parse tool arguments - OpenAI returns JSON string, Ollama returns object
 function parseToolArguments(args) {
   if (typeof args === 'string') {
@@ -871,8 +893,90 @@ If you want to explore further, you could ask about [layer-specific connectivity
 
           if (!apiResponse.ok) {
             const errorText = await apiResponse.text()
-            log('LLM API error', { error: errorText })
-            sendEvent('error', { message: `Error: LLM API error - ${errorText}` })
+            log('LLM API error', { status: apiResponse.status, error: errorText.substring(0, 500) })
+
+            // Retry on transient errors (5xx / 429) with exponential back-off
+            if (isTransientError(apiResponse.status)) {
+              const maxRetries = 2
+              let retrySuccess = false
+
+              for (let retry = 1; retry <= maxRetries; retry++) {
+                const backoffMs = retry * 3000 // 3 s, 6 s
+                log(`Retrying LLM API call (attempt ${retry}/${maxRetries}) after ${backoffMs}ms`, { status: apiResponse.status })
+                sendEvent('status', { message: `AI service temporarily unavailable — retrying (${retry}/${maxRetries})…` })
+                await new Promise(resolve => setTimeout(resolve, backoffMs))
+
+                try {
+                  const retryAbort = new AbortController()
+                  const retryTimeout = setTimeout(() => retryAbort.abort(), timeoutMs)
+
+                  const retryResponse = await fetch(`${apiBaseUrl}/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {})
+                    },
+                    body: JSON.stringify({
+                      model: apiModel,
+                      messages: conversationMessages,
+                      tools: tools,
+                      stream: false
+                    }),
+                    signal: retryAbort.signal
+                  })
+                  clearTimeout(retryTimeout)
+
+                  if (retryResponse.ok) {
+                    log('LLM API retry succeeded', { attempt: retry })
+                    // Replace apiResponse reference for downstream processing
+                    // We need to continue the outer loop with this good response,
+                    // so we re-assign and break out of the retry loop.
+                    const retryData = await retryResponse.json()
+                    const retryAssistant = retryData.choices?.[0]?.message
+                    if (retryAssistant) {
+                      // Push into conversation & process like a normal response
+                      conversationMessages.push(retryAssistant)
+                      if (retryAssistant.content && !retryAssistant.tool_calls?.length) {
+                        finalResponse = retryAssistant.content
+                      }
+                      retrySuccess = true
+                      break
+                    }
+                  } else {
+                    const retryErrorText = await retryResponse.text()
+                    log('LLM API retry failed', { attempt: retry, status: retryResponse.status, error: retryErrorText.substring(0, 300) })
+                  }
+                } catch (retryErr) {
+                  log('LLM API retry exception', { attempt: retry, error: retryErr.message })
+                }
+              }
+
+              if (retrySuccess) {
+                // If the retried response included tool_calls we need to let
+                // the outer for-loop continue processing them, so just
+                // `continue` to skip the rest of this iteration's
+                // post-response logic (it was already pushed above).
+                // If it was a final text response, fall through to the
+                // normal response-sending logic at end of loop.
+                const lastMsg = conversationMessages[conversationMessages.length - 1]
+                if (lastMsg.tool_calls?.length) {
+                  // Let outer loop handle tool calls on next iteration
+                  continue
+                }
+                // Final text response — will be sent after loop ends
+                break
+              }
+
+              // All retries exhausted
+              const friendlyMsg = sanitizeApiError(apiResponse.status, errorText)
+              sendEvent('error', { message: `Sorry, the AI service is temporarily unavailable. ${friendlyMsg}` })
+              controller.close()
+              return
+            }
+
+            // Non-transient error — show sanitized message
+            const friendlyMsg = sanitizeApiError(apiResponse.status, errorText)
+            sendEvent('error', { message: `Error: ${friendlyMsg}` })
             controller.close()
             return
           }
@@ -1283,7 +1387,14 @@ If you want to explore further, you could ask about [layer-specific connectivity
         log('Chat API request failed', { totalDuration: `${totalDuration}ms`, error: error.message })
         
         console.error('Chat API error:', error)
-        sendEvent('error', { message: `Error: ${error.message}` })
+        // Provide a user-friendly message for common failure modes
+        let userMessage = 'Sorry, something went wrong processing your request. Please try again.'
+        if (error.name === 'AbortError' || error.message?.includes('abort')) {
+          userMessage = 'The request timed out. The AI service may be under heavy load — please try again in a moment.'
+        } else if (error.message?.includes('fetch') || error.message?.includes('ECONNREFUSED')) {
+          userMessage = 'Unable to reach the AI service. Please check your connection and try again.'
+        }
+        sendEvent('error', { message: userMessage })
         
         // Clean up MCP client
         try {
