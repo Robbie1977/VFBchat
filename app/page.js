@@ -330,16 +330,73 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
   }
 
   // Convert plain text URLs to clickable links
+  // Handles both "Text https://url" (uses Text as link) and standalone URLs
   const convertUrlsToLinks = (children) => {
     if (!children) return children
     
     if (typeof children === 'string') {
-      const urlPattern = /https:\/\/chat\.virtualflybrain\.org\?query=([^\s)]+)/g
       const parts = []
       let lastIndex = 0
-      let match
       
-      while ((match = urlPattern.exec(children)) !== null) {
+      // Pattern: TEXT  https://chat.virtualflybrain.org?query=...
+      // Matches text followed by whitespace and then the URL
+      const textAndUrlRegex = /(\S.*?)\s+(https:\/\/chat\.virtualflybrain\.org\?query=[^\s)]+)/g
+      let match
+      let foundAnyMatch = false
+      
+      // First pass: look for text + URL patterns
+      while ((match = textAndUrlRegex.exec(children)) !== null) {
+        foundAnyMatch = true
+        
+        // Add text before this match
+        if (match.index > lastIndex) {
+          parts.push(children.substring(lastIndex, match.index))
+        }
+        
+        const linkText = match[1].trim()
+        const fullUrl = match[2]
+        const params = new URLSearchParams(fullUrl.split('?')[1])
+        const queryText = params.get('query')
+        const decodedQuery = queryText ? decodeURIComponent(queryText) : ''
+        
+        parts.push(
+          <a
+            key={fullUrl + match.index}
+            href={fullUrl}
+            onClick={(e) => {
+              e.preventDefault()
+              if (queryText) {
+                handleSend(decodeURIComponent(queryText))
+              }
+            }}
+            style={{
+              color: '#66d9ff',
+              textDecoration: 'underline',
+              textDecorationColor: '#66d9ff40',
+              cursor: 'pointer'
+            }}
+            title={`Ask: ${decodedQuery}`}
+          >
+            {linkText}
+          </a>
+        )
+        
+        lastIndex = textAndUrlRegex.lastIndex
+      }
+      
+      // If we found text+URL patterns, add remaining text and return
+      if (foundAnyMatch) {
+        if (lastIndex < children.length) {
+          parts.push(children.substring(lastIndex))
+        }
+        return parts
+      }
+      
+      // Second pass: handle standalone URLs (no preceding text)
+      lastIndex = 0
+      const urlOnlyRegex = /https:\/\/chat\.virtualflybrain\.org\?query=[^\s)]+/g
+      
+      while ((match = urlOnlyRegex.exec(children)) !== null) {
         // Add text before the URL
         if (match.index > lastIndex) {
           parts.push(children.substring(lastIndex, match.index))
@@ -372,7 +429,7 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
           </a>
         )
         
-        lastIndex = urlPattern.lastIndex
+        lastIndex = urlOnlyRegex.lastIndex
       }
       
       // Add remaining text
