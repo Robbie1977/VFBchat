@@ -382,7 +382,9 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
       }}>
         {messages.map((msg, idx) => {
           const suggestedQuestions = msg.role === 'assistant' ? extractSuggestedQuestions(msg.content) : []
-          const displayContent = msg.role === 'assistant' && suggestedQuestions.length > 0 ? removeSuggestedQuestions(msg.content) : msg.content
+          const displayContent = msg.role === 'assistant' && suggestedQuestions.length > 0 
+            ? convertSuggestionsToLinks(msg.content, suggestedQuestions)
+            : msg.content
           
           return (
             <div key={idx} style={{
@@ -410,44 +412,6 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
                   {displayContent}
                 </ReactMarkdown>
               </div>
-              
-              {/* Suggested questions as clickable links */}
-              {suggestedQuestions.length > 0 && (
-                <div style={{ marginTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-                  {suggestedQuestions.map((question, qIdx) => {
-                    const shareUrl = `https://chat.virtualflybrain.org?query=${encodeURIComponent(question)}`
-                    return (
-                      <a
-                        key={qIdx}
-                        href={shareUrl}
-                        onClick={(e) => {
-                          e.preventDefault()
-                          handleSend(question)
-                        }}
-                        style={{
-                          color: '#66d9ff',
-                          textDecoration: 'underline',
-                          textDecorationColor: '#66d9ff40',
-                          cursor: 'pointer',
-                          fontSize: '0.9em',
-                          transition: 'all 0.2s'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.target.style.color = '#99e5ff'
-                          e.target.style.textDecorationColor = '#99e5ff'
-                        }}
-                        onMouseLeave={(e) => {
-                          e.target.style.color = '#66d9ff'
-                          e.target.style.textDecorationColor = '#66d9ff40'
-                        }}
-                        title={shareUrl}
-                      >
-                        {question}
-                      </a>
-                    )
-                  })}
-                </div>
-              )}
               
               {/* Image gallery from API images field */}
               {msg.images && msg.images.length > 0 && (
