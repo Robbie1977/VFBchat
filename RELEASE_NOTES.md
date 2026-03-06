@@ -1,3 +1,17 @@
+Release 2.2.18
+
+This release adds intelligent extraction and rendering of suggested follow-up questions from gpt-5-nano responses, enabling users to quickly explore related topics with a single click.
+
+Changes:
+- Extracts follow-up question suggestions from gpt-5-nano responses using pattern recognition
+- Renders suggested questions as shareable hyperlinks with query string URLs (https://chat.virtualflybrain.org?query=...)
+- Auto-submits suggested questions when clicked, enabling seamless exploration flow
+- Supports multiple intro phrase variations and list formats for robust extraction
+- Filters suggestions to ensure quality and relevance (5-200 character range, max 5 suggestions)
+- Questions removed from message content and shown as clickable links below response
+- Hover effects highlight suggested links for better UX
+- Links can be copied and shared directly with full query context
+
 Release 2.2.17
 
 This release fixes dataset search filtering to properly return only actual datasets instead of unrelated items like individual neurons or interfaces.
