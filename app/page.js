@@ -64,12 +64,13 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
     }
   }, [])
 
-  const handleSend = async () => {
-    if (!input.trim()) return
+  const handleSend = async (messageText = null) => {
+    const textToSend = messageText || input
+    if (!textToSend.trim()) return
 
-    const userMessage = { role: 'user', content: input }
+    const userMessage = { role: 'user', content: textToSend }
     setMessages(prev => [...prev, userMessage])
-    setInput('')
+    if (!messageText) setInput('')
     setIsThinking(true)
     setThinkingMessage('Thinking')
 
@@ -133,6 +134,117 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
     if (role === 'assistant') return 'VFB'
     if (role === 'reasoning') return 'VFB'
     return role
+  }
+
+  // Extract suggested questions from the end of assistant messages
+  const extractSuggestedQuestions = (content) => {
+    // Common intro phrases that indicate follow-up suggestions
+    const introPatterns = [
+      'What would you like',
+      'What do you want to',
+      'Would you like',
+      'Would you like me to',
+      'If you\'d like',
+      'If you\'re interested',
+      'Feel free to ask',
+      'You could also ask',
+      'You might want to',
+      'Try asking',
+      'Some follow-up questions',
+      'Further questions',
+      'Next steps',
+      'Here are',
+      'You can also',
+      'Other questions',
+      'Additional queries',
+      'want to explore'
+    ]
+    
+    // Look for a bulleted/numbered list in the last 3 paragraphs
+    const paragraphs = content.split('\n\n')
+    
+    for (let i = Math.max(0, paragraphs.length - 3); i < paragraphs.length; i++) {
+      const para = paragraphs[i]
+      
+      // Check if this paragraph starts with an intro phrase
+      const hasIntro = introPatterns.some(phrase => 
+        para.toLowerCase().includes(phrase.toLowerCase())
+      )
+      
+      if (hasIntro || i === paragraphs.length - 1) {
+        // Extract list items (bullet points, dashes, or numbered)
+        const listItems = para
+          .split('\n')
+          .filter(line => {
+            const trimmed = line.trim()
+            // Match lines starting with -, •, *, or numbers followed by dot
+            return /^[-•*]\s+|^\d+\.\s+|^\d+\)\s+/.test(trimmed)
+          })
+          .map(line => {
+            // Remove bullet/number prefix
+            const cleaned = line
+              .replace(/^[-•*]\s+/, '')
+              .replace(/^\d+[.)]\s+/, '')
+              .trim()
+            return cleaned
+          })
+          .filter(item => {
+            // Filter out empty items and obviously non-question content
+            return item.length > 5 && 
+                   !item.includes('http') &&
+                   !item.includes('[') && // Avoid markdown-heavy lines
+                   item.length < 200 // Avoid extremely long items
+          })
+        
+        if (listItems.length >= 2) {
+          return listItems.slice(0, 5) // Limit to 5 suggestions
+        }
+      }
+    }
+    
+    return []
+  }
+
+  // Remove suggested questions from content for display
+  const removeSuggestedQuestions = (content) => {
+    const introPatterns = [
+      'What would you like',
+      'What do you want to',
+      'Would you like',
+      'Would you like me to',
+      'If you\'d like',
+      'If you\'re interested',
+      'Feel free to ask',
+      'You could also ask',
+      'You might want to',
+      'Try asking',
+      'Some follow-up questions',
+      'Further questions',
+      'Next steps',
+      'Here are',
+      'You can also',
+      'Other questions',
+      'Additional queries',
+      'want to explore'
+    ]
+    
+    // Remove the last section that contains intro phrase + list
+    const sections = content.split('\n\n')
+    
+    for (let i = sections.length - 1; i >= Math.max(0, sections.length - 3); i--) {
+      const section = sections[i]
+      const hasIntro = introPatterns.some(phrase => 
+        section.toLowerCase().includes(phrase.toLowerCase())
+      )
+      const hasListItems = /^[-•*]\s+|^\d+[.)]\s+/m.test(section)
+      
+      if (hasIntro && hasListItems) {
+        sections.splice(i, 1)
+        break
+      }
+    }
+    
+    return sections.join('\n\n').trim()
   }
 
   // Custom renderers for react-markdown
@@ -269,56 +381,100 @@ Feel free to ask about neural circuits, gene expression, connectome data, or any
         borderRadius: '8px',
         minHeight: 0
       }}>
-        {messages.map((msg, idx) => (
-          <div key={idx} style={{
-            marginBottom: '12px',
-            padding: '8px 12px',
-            backgroundColor: msg.role === 'user' ? '#1a1a2e' : 'transparent',
-            borderRadius: '6px',
-            borderLeft: msg.role === 'user' ? '3px solid #4a9eff' : '3px solid #2a6a3a'
-          }}>
-            <div style={{
-              fontSize: '0.75em',
-              fontWeight: 600,
-              color: msg.role === 'user' ? '#4a9eff' : '#4ade80',
-              marginBottom: '4px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px'
+        {messages.map((msg, idx) => {
+          const suggestedQuestions = msg.role === 'assistant' ? extractSuggestedQuestions(msg.content) : []
+          const displayContent = msg.role === 'assistant' && suggestedQuestions.length > 0 ? removeSuggestedQuestions(msg.content) : msg.content
+          
+          return (
+            <div key={idx} style={{
+              marginBottom: '12px',
+              padding: '8px 12px',
+              backgroundColor: msg.role === 'user' ? '#1a1a2e' : 'transparent',
+              borderRadius: '6px',
+              borderLeft: msg.role === 'user' ? '3px solid #4a9eff' : '3px solid #2a6a3a'
             }}>
-              {getDisplayName(msg.role)}
-            </div>
-            <div
-              className="message-content"
-              style={msg.role === 'reasoning' ? { fontSize: '0.85em', fontStyle: 'italic', color: '#999' } : {}}
-            >
-              <ReactMarkdown components={markdownComponents}>
-                {msg.content}
-              </ReactMarkdown>
-            </div>
-            {/* Image gallery from API images field */}
-            {msg.images && msg.images.length > 0 && (
-              <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {msg.images.map((img, i) => (
-                  <div key={i} style={{ display: 'inline-block' }}>
-                    <img
-                      src={img.thumbnail}
-                      alt={img.label}
-                      style={{
-                        width: '80px',
-                        height: '80px',
-                        objectFit: 'cover',
-                        border: '1px solid #444',
-                        borderRadius: '4px',
-                        cursor: 'pointer'
-                      }}
-                      title={img.label}
-                    />
-                  </div>
-                ))}
+              <div style={{
+                fontSize: '0.75em',
+                fontWeight: 600,
+                color: msg.role === 'user' ? '#4a9eff' : '#4ade80',
+                marginBottom: '4px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                {getDisplayName(msg.role)}
               </div>
-            )}
-          </div>
-        ))}
+              <div
+                className="message-content"
+                style={msg.role === 'reasoning' ? { fontSize: '0.85em', fontStyle: 'italic', color: '#999' } : {}}
+              >
+                <ReactMarkdown components={markdownComponents}>
+                  {displayContent}
+                </ReactMarkdown>
+              </div>
+              
+              {/* Suggested questions as clickable links */}
+              {suggestedQuestions.length > 0 && (
+                <div style={{ marginTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                  {suggestedQuestions.map((question, qIdx) => {
+                    const shareUrl = `https://chat.virtualflybrain.org?query=${encodeURIComponent(question)}`
+                    return (
+                      <a
+                        key={qIdx}
+                        href={shareUrl}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          handleSend(question)
+                        }}
+                        style={{
+                          color: '#66d9ff',
+                          textDecoration: 'underline',
+                          textDecorationColor: '#66d9ff40',
+                          cursor: 'pointer',
+                          fontSize: '0.9em',
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.color = '#99e5ff'
+                          e.target.style.textDecorationColor = '#99e5ff'
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.color = '#66d9ff'
+                          e.target.style.textDecorationColor = '#66d9ff40'
+                        }}
+                        title={shareUrl}
+                      >
+                        {question}
+                      </a>
+                    )
+                  })}
+                </div>
+              )}
+              
+              {/* Image gallery from API images field */}
+              {msg.images && msg.images.length > 0 && (
+                <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {msg.images.map((img, i) => (
+                    <div key={i} style={{ display: 'inline-block' }}>
+                      <img
+                        src={img.thumbnail}
+                        alt={img.label}
+                        style={{
+                          width: '80px',
+                          height: '80px',
+                          objectFit: 'cover',
+                          border: '1px solid #444',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                        title={img.label}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
         {isThinking && (
           <div style={{
             marginBottom: '12px',
