@@ -595,11 +595,19 @@ function resolveTermLocally(term) {
 
 export async function POST(request) {
   const startTime = Date.now()
+  const xForwardedFor = request.headers.get('x-forwarded-for') || ''
+  const clientIp = (xForwardedFor.split(',')[0] || '').trim() || request.headers.get('x-real-ip') || 'unknown'
+
   const { messages, scene } = await request.json()
   
   const message = messages[messages.length - 1].content // Last message is the current user input
   
-  log('Chat API request received', { message: message.substring(0, 100), scene })
+  log('Chat API request received', {
+    message: message.substring(0, 100),
+    scene,
+    clientIp,
+    xForwardedFor
+  })
 
   // Check for jailbreak attempts
   if (detectJailbreakAttempt(message)) {
